@@ -4,10 +4,14 @@
  */
 package Controladores;
 
-/**
- *
- * @author Juanm
- */
+import Interfaces.Interfaz_Main;
+
+
 public class Main {
     
+    public static void main(String [] args){
+        Interfaz_Main prin = new Interfaz_Main();
+        prin.setVisible(true);
+        prin.setLocationRelativeTo(null);
+    } 
 }

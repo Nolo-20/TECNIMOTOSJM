@@ -5,11 +5,15 @@
         <group>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Controladores/Conexion.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Controladores/Main.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Clases/Producto.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Clases/Compra.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Clases/Cliente.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Clases/Venta.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Sistema.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Cliente.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Producto.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Compra.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Empleado.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Proveedor.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Almacen.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Imagenes/logo_tecnimotos_2.png</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Main.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Venta.java</file>
         </group>
     </open-files>
 </project-private>
