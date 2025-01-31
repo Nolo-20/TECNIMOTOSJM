@@ -5,17 +5,19 @@
 package Interfaces;
 
 import Controladores.Conexion;
-import org.jdesktop.swingx.autocomplete.AutoCompleteDecorator;
 import Modelo.Producto;
 import Modelo.Proveedor;
+import java.sql.Statement;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.ParseException;
 import javax.swing.JOptionPane;
+import org.jdesktop.swingx.autocomplete.AutoCompleteDecorator;
 
 /**
  *
@@ -27,6 +29,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
     Connection conexion = (Connection) con.conectar();
     PreparedStatement ps;
     ResultSet res;
+    Interfaz_Almacen alm = new Interfaz_Almacen();
     
     public Interfaz_AProducto() {
         initComponents();
@@ -51,12 +54,21 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
             String nombre = rs.getString("Proveedor");
 
             // Guardar ambos valores en el JComboBox con un formato personalizado
-            boxProveedor.addItem(id + "-" + nombre);
+            boxProveedor.addItem(nombre);
         }
     } catch (SQLException e) {
         JOptionPane.showMessageDialog(null, "Error al cargar proveedores: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
     }
 }
+    
+    private void LimpiarCampos(){
+        txtPCodigo.setText("");
+        txtCantidadProducto.setText("");
+        txtDescripcionP.setText("");
+        boxProveedor.setSelectedItem(null);
+        txtPrecioP.setText("");
+        txtIdProveedor.setText("");
+    }
 
    
 
@@ -84,6 +96,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         btnAgregarProducto1 = new javax.swing.JButton();
         boxProveedor = new javax.swing.JComboBox<>();
         jLabel1 = new javax.swing.JLabel();
+        txtIdProveedor = new javax.swing.JTextField();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -98,15 +111,16 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         jLabel2.setText("REF/CODIGO");
         jPanel2.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 80, -1, -1));
 
-        txtPCodigo.setBackground(new java.awt.Color(255, 255, 255));
         txtPCodigo.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        txtPCodigo.setForeground(new java.awt.Color(0, 0, 0));
         txtPCodigo.setBorder(null);
+        txtPCodigo.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyPressed(java.awt.event.KeyEvent evt) {
+                txtPCodigoKeyPressed(evt);
+            }
+        });
         jPanel2.add(txtPCodigo, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 110, 130, 30));
 
-        txtDescripcionP.setBackground(new java.awt.Color(255, 255, 255));
         txtDescripcionP.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        txtDescripcionP.setForeground(new java.awt.Color(0, 0, 0));
         txtDescripcionP.setBorder(null);
         jPanel2.add(txtDescripcionP, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 210, 460, 30));
 
@@ -115,9 +129,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         jLabel3.setText("DESCRIPCION");
         jPanel2.add(jLabel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 180, -1, -1));
 
-        txtCantidadProducto.setBackground(new java.awt.Color(255, 255, 255));
         txtCantidadProducto.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        txtCantidadProducto.setForeground(new java.awt.Color(0, 0, 0));
         txtCantidadProducto.setBorder(null);
         jPanel2.add(txtCantidadProducto, new org.netbeans.lib.awtextra.AbsoluteConstraints(280, 110, 130, 30));
 
@@ -126,9 +138,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         jLabel4.setText("CANTIDAD");
         jPanel2.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(280, 80, -1, -1));
 
-        txtPrecioP.setBackground(new java.awt.Color(255, 255, 255));
         txtPrecioP.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        txtPrecioP.setForeground(new java.awt.Color(0, 0, 0));
         txtPrecioP.setBorder(null);
         jPanel2.add(txtPrecioP, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 310, 130, 30));
 
@@ -142,16 +152,17 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         jLabel6.setText("PROVEEDOR");
         jPanel2.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(270, 280, -1, -1));
 
-        btnSalirProducto.setBackground(new java.awt.Color(255, 255, 255));
         btnSalirProducto.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        btnSalirProducto.setForeground(new java.awt.Color(0, 0, 0));
         btnSalirProducto.setText("SALIR");
         btnSalirProducto.setBorder(null);
+        btnSalirProducto.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnSalirProductoActionPerformed(evt);
+            }
+        });
         jPanel2.add(btnSalirProducto, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 380, 110, 40));
 
-        btnAgregarProducto1.setBackground(new java.awt.Color(255, 255, 255));
         btnAgregarProducto1.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        btnAgregarProducto1.setForeground(new java.awt.Color(0, 0, 0));
         btnAgregarProducto1.setText("AGREGAR");
         btnAgregarProducto1.setBorder(null);
         btnAgregarProducto1.addActionListener(new java.awt.event.ActionListener() {
@@ -161,10 +172,8 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         });
         jPanel2.add(btnAgregarProducto1, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 380, 110, 40));
 
-        boxProveedor.setBackground(new java.awt.Color(255, 255, 255));
         boxProveedor.setEditable(true);
         boxProveedor.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        boxProveedor.setForeground(new java.awt.Color(0, 0, 0));
         boxProveedor.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
         boxProveedor.setBorder(null);
         boxProveedor.addActionListener(new java.awt.event.ActionListener() {
@@ -178,6 +187,12 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         jLabel1.setForeground(new java.awt.Color(255, 255, 255));
         jLabel1.setText("NUEVO PRODUCTO");
         jPanel2.add(jLabel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 10, -1, -1));
+
+        txtIdProveedor.setEditable(false);
+        txtIdProveedor.setBackground(new java.awt.Color(255, 255, 255));
+        txtIdProveedor.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        txtIdProveedor.setBorder(null);
+        jPanel2.add(txtIdProveedor, new org.netbeans.lib.awtextra.AbsoluteConstraints(270, 350, 60, 20));
 
         jPanel1.add(jPanel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 10, 540, 460));
 
@@ -199,7 +214,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
 String cod = txtPCodigo.getText().trim();
 String can = txtCantidadProducto.getText();
 String desc = txtDescripcionP.getText();
-String provee = boxProveedor.getSelectedItem().toString();
+String provee = (String) boxProveedor.getSelectedItem(); // Nombre del proveedor
 String prec = txtPrecioP.getText();
 
 if (cod.isEmpty() || desc.isEmpty() || prec.isEmpty() || can.isEmpty() || provee.isEmpty()) {
@@ -210,36 +225,50 @@ if (cod.isEmpty() || desc.isEmpty() || prec.isEmpty() || can.isEmpty() || provee
 try {
     int canInt = Integer.parseInt(can);
     double precDouble = Double.parseDouble(prec);
+    int idProveedor = -1; // ID del proveedor
 
     // Verificar si el proveedor existe
-    String queryProveedor = "SELECT COUNT(*) FROM proveedor WHERE ID = ?";
+    String queryProveedor = "SELECT ID FROM proveedor WHERE Proveedor = ?";
     PreparedStatement psProveedor = conexion.prepareStatement(queryProveedor);
     psProveedor.setString(1, provee);
     ResultSet rsProveedor = psProveedor.executeQuery();
-    rsProveedor.next();
-    
-    if (rsProveedor.getInt(1) == 0) { // Si el proveedor NO existe, lo insertamos
+
+    if (rsProveedor.next()) { 
+        // Si el proveedor existe, obtenemos su ID
+        idProveedor = rsProveedor.getInt("ID");
+    } else { 
+        // Si no existe, lo insertamos
         String insertProveedor = "INSERT INTO proveedor(Proveedor) VALUES (?)";
-        PreparedStatement psInsertProveedor = conexion.prepareStatement(insertProveedor);
-        psInsertProveedor.setString(1, provee); // Puedes cambiar este valor por un nombre adecuado
+        PreparedStatement psInsertProveedor = conexion.prepareStatement(insertProveedor, Statement.RETURN_GENERATED_KEYS);
+        psInsertProveedor.setString(1, provee);
         psInsertProveedor.executeUpdate();
-    }
-    
-    // Extraer solo el ID del proveedor seleccionado
-    String idProveedor = provee.split(" - ")[0];
-    
-    // Insertar el producto con el proveedor existente o recién agregado
+        
+        cargarProveedores();
+
+        // Obtener el ID generado
+        ResultSet rsGenKeys = psInsertProveedor.getGeneratedKeys();
+        if (rsGenKeys.next()) {
+            idProveedor = rsGenKeys.getInt(1);
+        }
+    } 
+   
+
+    // Mostrar el ID en el txtidProveedor
+    txtIdProveedor.setText(String.valueOf(idProveedor));
+
+    // Insertar el producto con el proveedor correcto
     String queryProducto = "INSERT INTO producto(Codigo, Descripcion, ID_Proveedor, Precio, Stock) VALUES (?, ?, ?, ?, ?)";
     PreparedStatement psProducto = conexion.prepareStatement(queryProducto);
     psProducto.setString(1, cod);
     psProducto.setString(2, desc);
-    psProducto.setString(3, idProveedor);
+    psProducto.setInt(3, idProveedor); // Aquí usamos el ID correcto
     psProducto.setDouble(4, precDouble);
-    psProducto.setInt(5, canInt); 
+    psProducto.setInt(5, canInt);
     int res = psProducto.executeUpdate();
 
     if (res > 0) {
         JOptionPane.showMessageDialog(null, "PRODUCTO GUARDADO");
+        LimpiarCampos();
     } else {
         JOptionPane.showMessageDialog(null, "ERROR AL GUARDAR PRODUCTO", "ERROR", JOptionPane.ERROR_MESSAGE);
     }
@@ -247,15 +276,26 @@ try {
 } catch (SQLException e) {
     JOptionPane.showMessageDialog(null, "Error de base de datos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
 } catch (NumberFormatException e) {
-    //JOptionPane.showMessageDialog(null, "Por favor ingrese valores numéricos válidos para precio y cantidad.", "Error", JOptionPane.ERROR_MESSAGE);
-    JOptionPane.showMessageDialog(null, e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+    JOptionPane.showMessageDialog(null, "Por favor ingrese valores numéricos válidos para precio y cantidad.", "Error", JOptionPane.ERROR_MESSAGE);
 }
+ 
+
 
     }//GEN-LAST:event_btnAgregarProducto1ActionPerformed
 
     private void boxProveedorActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_boxProveedorActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_boxProveedorActionPerformed
+
+    private void btnSalirProductoActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSalirProductoActionPerformed
+        this.dispose();
+        alm.CargarInventario();
+    }//GEN-LAST:event_btnSalirProductoActionPerformed
+
+    private void txtPCodigoKeyPressed(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPCodigoKeyPressed
+    if (evt.getKeyCode() == KeyEvent.VK_ENTER) { // Detecta Enter
+    }
+    }//GEN-LAST:event_txtPCodigoKeyPressed
 
     /**
      * @param args the command line arguments
@@ -306,6 +346,7 @@ try {
     private javax.swing.JPanel jPanel2;
     private javax.swing.JTextField txtCantidadProducto;
     private javax.swing.JTextField txtDescripcionP;
+    private javax.swing.JTextField txtIdProveedor;
     private javax.swing.JTextField txtPCodigo;
     private javax.swing.JTextField txtPrecioP;
     // End of variables declaration//GEN-END:variables

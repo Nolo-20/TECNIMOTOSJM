@@ -3,17 +3,20 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Empleado.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Main.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Venta.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Controladores/Conexion.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Controladores/Main.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Cliente.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Producto.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Compra.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Empleado.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Proveedor.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_AProducto.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Almacen.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Pago.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Imagenes/logo_tecnimotos_2.png</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Main.java</file>
-            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Venta.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Login.java</file>
         </group>
     </open-files>
 </project-private>
