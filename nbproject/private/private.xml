@@ -4,6 +4,7 @@
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Empleado.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/nbproject/project.properties</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Main.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Modelo/Venta.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Controladores/Conexion.java</file>
@@ -15,6 +16,7 @@
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_AProducto.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Almacen.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Pago.java</file>
+            <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Controladores/Ticket.java</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Imagenes/logo_tecnimotos_2.png</file>
             <file>file:/C:/Users/Juanm/OneDrive/Documentos/NetBeansProjects/TecnimotosFI/src/Interfaces/Interfaz_Login.java</file>
         </group>

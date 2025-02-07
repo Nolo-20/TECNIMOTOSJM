@@ -22,6 +22,7 @@ public class Interfaz_Main extends javax.swing.JFrame {
     public Interfaz_Main() {
         initComponents();
         btnAlmacen.setIcon(setIcono("/Imagenes/almacen.png", btnAlmacen));
+        setResizable(false);
     }
 
     /**

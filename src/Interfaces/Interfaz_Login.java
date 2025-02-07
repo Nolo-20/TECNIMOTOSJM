@@ -15,6 +15,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
      */
     public Interfaz_Login() {
         initComponents();
+        setResizable(false);
     }
 
     /**
