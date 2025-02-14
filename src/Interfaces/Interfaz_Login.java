@@ -4,18 +4,34 @@
  */
 package Interfaces;
 
+import Controladores.Conexion;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import javax.swing.JOptionPane;
+import org.mindrot.jbcrypt.BCrypt;
+
 /**
  *
  * @author Juanm
  */
 public class Interfaz_Login extends javax.swing.JFrame {
 
-    /**
-     * Creates new form Interfaz_Login
-     */
+    Conexion con = new Conexion();
+    Connection conexion = (Connection) con.conectar();
+    PreparedStatement ps;
+    ResultSet res;
+
     public Interfaz_Login() {
         initComponents();
         setResizable(false);
+    }
+
+    private void abrirInterfaz(String rol) {
+        Interfaz_Almacen almacen = new Interfaz_Almacen(rol);
+        almacen.setVisible(true);
+        almacen.setLocationRelativeTo(null);
+        this.dispose(); // Cierra la ventana de login
     }
 
     /**
@@ -30,14 +46,21 @@ public class Interfaz_Login extends javax.swing.JFrame {
         jPanel1 = new javax.swing.JPanel();
         jPanel2 = new javax.swing.JPanel();
         jLabel3 = new javax.swing.JLabel();
-        jLabel6 = new javax.swing.JLabel();
         jLabel7 = new javax.swing.JLabel();
-        jButton1 = new javax.swing.JButton();
+        btnRegistrarU = new javax.swing.JButton();
+        jLabel8 = new javax.swing.JLabel();
+        btnIngresar = new javax.swing.JButton();
+        txtUsuario = new javax.swing.JTextField();
+        jSeparator1 = new javax.swing.JSeparator();
+        jSeparator2 = new javax.swing.JSeparator();
+        txtContrasena = new javax.swing.JPasswordField();
+        jLabel9 = new javax.swing.JLabel();
         jPanel3 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
         jLabel4 = new javax.swing.JLabel();
         jLabel5 = new javax.swing.JLabel();
+        jLabel6 = new javax.swing.JLabel();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -48,41 +71,94 @@ public class Interfaz_Login extends javax.swing.JFrame {
 
         jLabel3.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jLabel3.setText("CONTRASEÑA");
-        jPanel2.add(jLabel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 210, -1, -1));
+        jPanel2.add(jLabel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 330, -1, -1));
 
-        jLabel6.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel6.setText("LOGIN");
-        jPanel2.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(60, 60, -1, -1));
+        jLabel7.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
+        jLabel7.setText("INGRESO");
+        jPanel2.add(jLabel7, new org.netbeans.lib.awtextra.AbsoluteConstraints(120, 200, -1, -1));
 
-        jLabel7.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel7.setText("USUARIO");
-        jPanel2.add(jLabel7, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 130, -1, -1));
+        btnRegistrarU.setBackground(new java.awt.Color(0, 153, 255));
+        btnRegistrarU.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnRegistrarU.setText("REGISTRAR");
+        btnRegistrarU.setBorder(null);
+        btnRegistrarU.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnRegistrarUActionPerformed(evt);
+            }
+        });
+        jPanel2.add(btnRegistrarU, new org.netbeans.lib.awtextra.AbsoluteConstraints(90, 450, 120, 40));
 
-        jButton1.setBackground(new java.awt.Color(255, 51, 51));
-        jButton1.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jButton1.setText("INGRESAR");
-        jButton1.setBorder(null);
-        jPanel2.add(jButton1, new org.netbeans.lib.awtextra.AbsoluteConstraints(90, 400, 130, 50));
+        jLabel8.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        jLabel8.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/acceso.png"))); // NOI18N
+        jPanel2.add(jLabel8, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 20, 160, 160));
+
+        btnIngresar.setBackground(new java.awt.Color(0, 153, 255));
+        btnIngresar.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnIngresar.setText("INGRESAR");
+        btnIngresar.setBorder(null);
+        btnIngresar.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnIngresarActionPerformed(evt);
+            }
+        });
+        jPanel2.add(btnIngresar, new org.netbeans.lib.awtextra.AbsoluteConstraints(90, 400, 120, 40));
+
+        txtUsuario.setFont(new java.awt.Font("Roboto", 1, 14)); // NOI18N
+        txtUsuario.setBorder(null);
+        txtUsuario.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mousePressed(java.awt.event.MouseEvent evt) {
+                txtUsuarioMousePressed(evt);
+            }
+        });
+        jPanel2.add(txtUsuario, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 280, 260, 30));
+
+        jSeparator1.setForeground(new java.awt.Color(51, 51, 51));
+        jPanel2.add(jSeparator1, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 380, 260, -1));
+
+        jSeparator2.setForeground(new java.awt.Color(51, 51, 51));
+        jPanel2.add(jSeparator2, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 310, 260, -1));
+
+        txtContrasena.setFont(new java.awt.Font("Roboto", 1, 14)); // NOI18N
+        txtContrasena.setBorder(null);
+        txtContrasena.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mousePressed(java.awt.event.MouseEvent evt) {
+                txtContrasenaMousePressed(evt);
+            }
+        });
+        txtContrasena.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                txtContrasenaActionPerformed(evt);
+            }
+        });
+        jPanel2.add(txtContrasena, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 350, 260, 30));
+
+        jLabel9.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        jLabel9.setText("USUARIO");
+        jPanel2.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 260, -1, -1));
 
         jPanel1.add(jPanel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 0, 300, 510));
 
-        jPanel3.setBackground(new java.awt.Color(255, 51, 51));
+        jPanel3.setBackground(new java.awt.Color(204, 204, 204));
         jPanel3.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
         jLabel1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/Tecnimotos-logo-grande.png"))); // NOI18N
         jPanel3.add(jLabel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 430, 330));
 
         jLabel2.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel2.setText("Correo");
-        jPanel3.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 390, -1, -1));
+        jLabel2.setText("V1.0");
+        jPanel3.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 480, -1, -1));
 
-        jLabel4.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel4.setText("Direccion");
-        jPanel3.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 330, -1, -1));
+        jLabel4.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
+        jLabel4.setText("DIAGONAL 58 SUR # 29 A 22");
+        jPanel3.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 330, -1, -1));
 
-        jLabel5.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel5.setText("Telefono");
-        jPanel3.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 360, -1, -1));
+        jLabel5.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
+        jLabel5.setText("320 9160538");
+        jPanel3.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(190, 370, -1, -1));
+
+        jLabel6.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
+        jLabel6.setText("tecnimotosjm2@gmail.com");
+        jPanel3.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 410, -1, -1));
 
         jPanel1.add(jPanel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 500, 510));
 
@@ -99,6 +175,83 @@ public class Interfaz_Login extends javax.swing.JFrame {
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
+
+    private void txtUsuarioMousePressed(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_txtUsuarioMousePressed
+//        if (txtUsuario.getText().equals("Ingrese Usuario")) {
+//            txtUsuario.setText("");
+//            txtUsuario.setForeground(Color.black);
+//        }
+//        if (String.valueOf(txtContrasena.getPassword()).isEmpty()) {
+//            txtContrasena.setText("********");
+//            txtContrasena.setForeground(Color.gray);
+//        }
+    }//GEN-LAST:event_txtUsuarioMousePressed
+
+    private void txtContrasenaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtContrasenaActionPerformed
+        
+    }//GEN-LAST:event_txtContrasenaActionPerformed
+
+    private void btnRegistrarUActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegistrarUActionPerformed
+        Interfaz_Registro registro = new Interfaz_Registro();
+        registro.setVisible(true);
+        registro.setLocationRelativeTo(null);
+        this.dispose();
+    }//GEN-LAST:event_btnRegistrarUActionPerformed
+
+    private void btnIngresarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnIngresarActionPerformed
+        String usuario = txtUsuario.getText().trim();
+        String contrasena = new String(txtContrasena.getPassword()).trim();
+
+        // 1️⃣ VALIDAR CAMPOS VACÍOS
+        if (usuario.isEmpty() || contrasena.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Por favor, ingrese usuario y contraseña.");
+            return;
+        }
+
+        // 2️⃣ CONSULTAR USUARIO EN LA BASE DE DATOS
+        String sql = "SELECT Contrasena, Rol FROM Usuario WHERE Usuario = ?";
+
+        try {
+            ps = conexion.prepareStatement(sql);
+
+            ps.setString(1, usuario);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                String hashedPassword = rs.getString("Contrasena"); // Contraseña almacenada en la BD
+                String rol = rs.getString("Rol"); // Obtener el rol del usuario
+
+                // 3️⃣ CASO ESPECIAL: SI ES "Admin", COMPARAR DIRECTAMENTE
+                if (usuario.equals("Admin") && contrasena.equals(hashedPassword)) {
+                    JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso como Administrador.");
+                    abrirInterfaz(rol);
+                } // 4️⃣ PARA OTROS USUARIOS, USAR BCrypt
+                else if (BCrypt.checkpw(contrasena, hashedPassword)) {
+                    JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso.");
+                    abrirInterfaz(rol);
+                } // 5️⃣ CONTRASEÑA INCORRECTA
+                else {
+                    JOptionPane.showMessageDialog(this, "Contraseña incorrecta.");
+                }
+            } else {
+                JOptionPane.showMessageDialog(this, "Usuario no encontrado.");
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error al conectar con la base de datos: " + e.getMessage());
+        }
+    }//GEN-LAST:event_btnIngresarActionPerformed
+
+    private void txtContrasenaMousePressed(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_txtContrasenaMousePressed
+//        if (String.valueOf(txtContrasena.getPassword()).equals("********")) {
+//            txtContrasena.setText("");
+//            txtContrasena.setForeground(Color.black);
+//        }
+//        if (txtUsuario.getText().isEmpty()) {
+//            txtUsuario.setText("Ingrese Usuario");
+//            txtUsuario.setForeground(Color.gray);
+//        }
+    }//GEN-LAST:event_txtContrasenaMousePressed
 
     /**
      * @param args the command line arguments
@@ -136,7 +289,8 @@ public class Interfaz_Login extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton jButton1;
+    private javax.swing.JButton btnIngresar;
+    private javax.swing.JButton btnRegistrarU;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
@@ -144,8 +298,14 @@ public class Interfaz_Login extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel5;
     private javax.swing.JLabel jLabel6;
     private javax.swing.JLabel jLabel7;
+    private javax.swing.JLabel jLabel8;
+    private javax.swing.JLabel jLabel9;
     private javax.swing.JPanel jPanel1;
     private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
+    private javax.swing.JSeparator jSeparator1;
+    private javax.swing.JSeparator jSeparator2;
+    private javax.swing.JPasswordField txtContrasena;
+    private javax.swing.JTextField txtUsuario;
     // End of variables declaration//GEN-END:variables
 }

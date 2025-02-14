@@ -4,15 +4,15 @@
  */
 package Controladores;
 
-import Interfaces.Interfaz_Almacen;
-import Interfaces.Interfaz_Main;
+import Interfaces.Interfaz_Login;
+
 
 
 public class Main {
     
     public static void main(String [] args){
-        Interfaz_Almacen open = new Interfaz_Almacen();
-        open.setVisible(true);
-        open.setLocationRelativeTo(null);
+        Interfaz_Login login = new Interfaz_Login();
+        login.setVisible(true);
+        login.setLocationRelativeTo(null);
     } 
 }

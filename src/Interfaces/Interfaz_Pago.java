@@ -15,7 +15,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import javax.swing.table.DefaultTableModel;
 
 /**
  *
@@ -31,16 +30,18 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     private int idCliente;
     private String nombreCliente;
     private List<String> productos;
+    private Interfaz_Almacen VentanaAlmacen;
 
-    public Interfaz_Pago(double total, int idCliente, String nombreCliente, List<String> productos) {
+    public Interfaz_Pago(Interfaz_Almacen ventanaAlmacen, double total, int idCliente, String nombreCliente, List<String> productos) {
         initComponents();
+        this.VentanaAlmacen = ventanaAlmacen;
         this.total = total;
         this.idCliente = idCliente;
         this.nombreCliente = nombreCliente;
         this.productos = productos;
 
         // Mostrar los datos en la interfaz
-        txtTotalPagar.setText(String.format("$%.2f", total));
+//        txtTotalPagar.setText(String.format("$%.2f", total));
 
         // Mostrar los productos en un JTextArea o JTable
         for (String producto : productos) {
@@ -48,12 +49,17 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         }
 
         cargarMetodosPago();
-        txtTotalPagar.setText(String.format("Total: $%.2f", total));
+        txtTotalPagar.setText(String.format("$%.2f", total));
         setDefaultCloseOperation(Interfaz_Pago.DISPOSE_ON_CLOSE);
         setResizable(false);
     }
 
     public Interfaz_Pago() {
+    }
+
+    // Método para limpiar la tabla de la ventana de almacén
+    private void limpiarTablaVenta() {
+        VentanaAlmacen.limpiarTablaVenta(); // Llama al método de limpieza
     }
 
     private void calcularCambio() {
@@ -75,7 +81,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
             double paga = Double.parseDouble(textoPaga);
 
             // Reemplazar "Total: $" y convertir formato de coma a punto (para decimales)
-            String totalText = txtTotalPagar.getText().replace("Total: $", "").replace(",", ".").trim();
+            String totalText = txtTotalPagar.getText().replace("$", "").replace(",", "").trim();
             double totalVenta = Double.parseDouble(totalText);
 
             double cambio = paga - totalVenta;
@@ -95,8 +101,8 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     private void cargarMetodosPago() {
         try {
             String sql = "SELECT ID, Pago FROM metodo_pago";
-            PreparedStatement pst = conexion.prepareStatement(sql);
-            ResultSet rs = pst.executeQuery();
+            ps = conexion.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
 
             boxMetodoPago.removeAllItems();
             metodosPagoMap.clear();
@@ -118,7 +124,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         int idPago = metodosPagoMap.get(metodoPago);
 
         // Obtener el total de la venta
-        double totalVenta = Double.parseDouble(txtTotalPagar.getText().replace("Total: $", "").replace(",", ".").trim());
+        double totalVenta = Double.parseDouble(txtTotalPagar.getText().replace("$", "").replace(",", ".").trim());
 
         // Obtener el cambio (si aplica)
         double cambio = 0.0;
@@ -146,6 +152,9 @@ public class Interfaz_Pago extends javax.swing.JFrame {
             // Generar el recibo de la venta
             Ticket ticket = new Ticket();
             ticket.generarTicketPDF(idVenta);
+
+            //limpiar Tabla Despues de realizar Pago 
+            limpiarTablaVenta();
 
             // Mostrar mensaje de éxito
             JOptionPane.showMessageDialog(null, "Venta registrada exitosamente. Recibo generado.");
@@ -245,6 +254,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         txtTotalPagar = new javax.swing.JTextField();
         txtPaga = new javax.swing.JTextField();
         btnFinalizar = new javax.swing.JButton();
+        btnSalir = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -277,7 +287,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         boxMetodoPago.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
         boxMetodoPago.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
         boxMetodoPago.setBorder(null);
-        jPanel2.add(boxMetodoPago, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 210, 130, -1));
+        jPanel2.add(boxMetodoPago, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 210, 180, 30));
 
         txtCambio.setEditable(false);
         txtCambio.setBackground(new java.awt.Color(204, 204, 204));
@@ -309,6 +319,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         jPanel2.add(txtPaga, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 100, 140, 30));
 
         btnFinalizar.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        btnFinalizar.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/cheque.png"))); // NOI18N
         btnFinalizar.setText("FINALIZAR");
         btnFinalizar.setBorder(null);
         btnFinalizar.addActionListener(new java.awt.event.ActionListener() {
@@ -316,9 +327,20 @@ public class Interfaz_Pago extends javax.swing.JFrame {
                 btnFinalizarActionPerformed(evt);
             }
         });
-        jPanel2.add(btnFinalizar, new org.netbeans.lib.awtextra.AbsoluteConstraints(270, 230, 100, 40));
+        jPanel2.add(btnFinalizar, new org.netbeans.lib.awtextra.AbsoluteConstraints(280, 260, 100, 40));
 
-        jPanel1.add(jPanel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 10, 380, 280));
+        btnSalir.setBackground(new java.awt.Color(204, 204, 204));
+        btnSalir.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        btnSalir.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/atras.png"))); // NOI18N
+        btnSalir.setBorder(null);
+        btnSalir.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnSalirActionPerformed(evt);
+            }
+        });
+        jPanel2.add(btnSalir, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 260, 50, 40));
+
+        jPanel1.add(jPanel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 10, 390, 310));
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -328,7 +350,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 304, Short.MAX_VALUE)
+            .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, 336, javax.swing.GroupLayout.PREFERRED_SIZE)
         );
 
         pack();
@@ -349,6 +371,10 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     private void btnFinalizarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnFinalizarActionPerformed
         finalizarCompra();
     }//GEN-LAST:event_btnFinalizarActionPerformed
+
+    private void btnSalirActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSalirActionPerformed
+        this.dispose();
+    }//GEN-LAST:event_btnSalirActionPerformed
 
     /**
      * @param args the command line arguments
@@ -388,6 +414,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JComboBox<String> boxMetodoPago;
     private javax.swing.JButton btnFinalizar;
+    private javax.swing.JButton btnSalir;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;

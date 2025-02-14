@@ -7,6 +7,7 @@ package Interfaces;
 import Controladores.Conexion;
 import Modelo.Producto;
 import Modelo.Proveedor;
+import java.awt.Toolkit;
 import java.sql.Statement;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -24,13 +25,13 @@ import org.jdesktop.swingx.autocomplete.AutoCompleteDecorator;
  * @author Juanm
  */
 public class Interfaz_AProducto extends javax.swing.JFrame {
-    
+
     Conexion con = new Conexion();
     Connection conexion = (Connection) con.conectar();
     PreparedStatement ps;
     ResultSet res;
     Interfaz_Almacen alm = new Interfaz_Almacen();
-    
+
     public Interfaz_AProducto() {
         initComponents();
         setDefaultCloseOperation(Interfaz_AProducto.DISPOSE_ON_CLOSE);
@@ -40,14 +41,14 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         // Llenar JComboBox con proveedores existentes
         cargarProveedores();
     }
-    
+
     private void cargarProveedores() {
         boxProveedor.removeAllItems(); // Limpiar el comboBox antes de llenarlo
         try {
             String query = "SELECT ID, Proveedor FROM proveedor";  // Obtener ID y Nombre
-            PreparedStatement ps = conexion.prepareStatement(query);
+            ps = conexion.prepareStatement(query);
             res = ps.executeQuery();
-            
+
             while (res.next()) {
                 String id = res.getString("ID");
                 String nombre = res.getString("Proveedor");
@@ -59,7 +60,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(null, "Error al cargar proveedores: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
-    
+
     private void LimpiarCampos() {
         txtPCodigo.setText("");
         txtCantidadProducto.setText("");
@@ -139,6 +140,11 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
 
         txtCantidadProducto.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
         txtCantidadProducto.setBorder(null);
+        txtCantidadProducto.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                txtCantidadProductoKeyTyped(evt);
+            }
+        });
         jPanel2.add(txtCantidadProducto, new org.netbeans.lib.awtextra.AbsoluteConstraints(320, 110, 50, 20));
 
         jLabel4.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
@@ -148,6 +154,11 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
 
         txtPrecioP.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
         txtPrecioP.setBorder(null);
+        txtPrecioP.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                txtPrecioPKeyTyped(evt);
+            }
+        });
         jPanel2.add(txtPrecioP, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 330, 110, 20));
 
         jLabel5.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
@@ -160,17 +171,19 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         jLabel6.setText("PROVEEDOR");
         jPanel2.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 240, -1, -1));
 
-        btnSalirProducto.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        btnSalirProducto.setText("SALIR");
+        btnSalirProducto.setBackground(new java.awt.Color(50, 101, 255));
+        btnSalirProducto.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnSalirProducto.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/atras.png"))); // NOI18N
         btnSalirProducto.setBorder(null);
         btnSalirProducto.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 btnSalirProductoActionPerformed(evt);
             }
         });
-        jPanel2.add(btnSalirProducto, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 380, 110, 40));
+        jPanel2.add(btnSalirProducto, new org.netbeans.lib.awtextra.AbsoluteConstraints(480, 380, 40, 40));
 
-        btnAgregarProducto1.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        btnAgregarProducto1.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnAgregarProducto1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/agregar-producto.png"))); // NOI18N
         btnAgregarProducto1.setText("AGREGAR");
         btnAgregarProducto1.setBorder(null);
         btnAgregarProducto1.addActionListener(new java.awt.event.ActionListener() {
@@ -204,6 +217,14 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
 
         txtPrecioV.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
         txtPrecioV.setBorder(null);
+        txtPrecioV.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyReleased(java.awt.event.KeyEvent evt) {
+                txtPrecioVKeyReleased(evt);
+            }
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                txtPrecioVKeyTyped(evt);
+            }
+        });
         jPanel2.add(txtPrecioV, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 260, 110, 20));
 
         jLabel7.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
@@ -234,12 +255,12 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         String provee = (String) boxProveedor.getSelectedItem(); // Nombre del proveedor
         String prec = txtPrecioP.getText();
         String precV = txtPrecioV.getText();
-        
+
         if (cod.isEmpty() || desc.isEmpty() || prec.isEmpty() || can.isEmpty() || provee.isEmpty() || precV.isEmpty()) {
             JOptionPane.showMessageDialog(null, "POR FAVOR INGRESE TODOS LOS CAMPOS NECESARIOS", "ERROR", JOptionPane.ERROR_MESSAGE);
             return;
         }
-        
+
         try {
             int canInt = Integer.parseInt(can);
             double precDouble = Double.parseDouble(prec);
@@ -251,7 +272,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
             PreparedStatement psProveedor = conexion.prepareStatement(queryProveedor);
             psProveedor.setString(1, provee);
             res = psProveedor.executeQuery();
-            
+
             if (res.next()) {
                 // Si el proveedor existe, obtenemos su ID
                 idProveedor = res.getInt("ID");
@@ -261,7 +282,7 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
                 PreparedStatement psInsertProveedor = conexion.prepareStatement(insertProveedor, Statement.RETURN_GENERATED_KEYS);
                 psInsertProveedor.setString(1, provee);
                 psInsertProveedor.executeUpdate();
-                
+
                 cargarProveedores();
 
                 // Obtener el ID generado
@@ -284,21 +305,20 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
             psProducto.setDouble(5, precVDouble);
             psProducto.setInt(6, canInt);
             int res = psProducto.executeUpdate();
-            
+
             if (res > 0) {
                 JOptionPane.showMessageDialog(null, "PRODUCTO GUARDADO");
                 LimpiarCampos();
             } else {
                 JOptionPane.showMessageDialog(null, "ERROR AL GUARDAR PRODUCTO", "ERROR", JOptionPane.ERROR_MESSAGE);
             }
-            
+
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(null, "Error de base de datos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         } catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(null, "Por favor ingrese valores numéricos válidos para precio y cantidad.", "Error", JOptionPane.ERROR_MESSAGE);
         }
-        
-        
+
 
     }//GEN-LAST:event_btnAgregarProducto1ActionPerformed
 
@@ -324,6 +344,55 @@ public class Interfaz_AProducto extends javax.swing.JFrame {
         String texto = txtPCodigo.getText();
         txtPCodigo.setText(texto.replaceAll("[^0-9]", ""));
     }//GEN-LAST:event_txtPCodigoKeyReleased
+
+    private void txtPrecioVKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPrecioVKeyReleased
+
+    }//GEN-LAST:event_txtPrecioVKeyReleased
+
+    private void txtPrecioVKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPrecioVKeyTyped
+        char c = evt.getKeyChar();
+
+        // Permitir solo números, un punto y la tecla de borrar
+        if (!Character.isDigit(c) && c != KeyEvent.VK_BACK_SPACE && c != '.') {
+            evt.consume();
+            Toolkit.getDefaultToolkit().beep();
+        }
+
+        // Evitar más de un punto decimal
+        if (c == '.' && txtPrecioV.getText().contains(".")) {
+            evt.consume(); // Bloquea si ya hay un punto
+        }
+    }//GEN-LAST:event_txtPrecioVKeyTyped
+
+    private void txtPrecioPKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPrecioPKeyTyped
+        char c = evt.getKeyChar();
+
+        // Permitir solo números, un punto y la tecla de borrar
+        if (!Character.isDigit(c) && c != KeyEvent.VK_BACK_SPACE && c != '.') {
+            evt.consume();
+            Toolkit.getDefaultToolkit().beep();
+        }
+
+        // Evitar más de un punto decimal
+        if (c == '.' && txtPrecioV.getText().contains(".")) {
+            evt.consume(); // Bloquea si ya hay un punto
+        }
+    }//GEN-LAST:event_txtPrecioPKeyTyped
+
+    private void txtCantidadProductoKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtCantidadProductoKeyTyped
+        char c = evt.getKeyChar();
+
+        // Permitir solo números, un punto y la tecla de borrar
+        if (!Character.isDigit(c) && c != KeyEvent.VK_BACK_SPACE && c != '.') {
+            evt.consume();
+            Toolkit.getDefaultToolkit().beep();
+        }
+
+        // Evitar más de un punto decimal
+        if (c == '.' && txtPrecioV.getText().contains(".")) {
+            evt.consume(); // Bloquea si ya hay un punto
+        }
+    }//GEN-LAST:event_txtCantidadProductoKeyTyped
 
     /**
      * @param args the command line arguments

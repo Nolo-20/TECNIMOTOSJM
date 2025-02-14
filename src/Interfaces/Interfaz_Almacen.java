@@ -13,9 +13,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -48,10 +49,12 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     ResultSet res;
     private TableRowSorter<DefaultTableModel> sorter;
     private Timer timer;  // Temporizador para esperar antes de ejecutar la consulta
+    private String rol;
 
-    public Interfaz_Almacen() {
+    public Interfaz_Almacen(String rol) {
         initComponents();
-        //CargarInventario();
+        this.rol = rol;
+        configurarPermisos();
         setResizable(false);
         asignarCliente();
         obtenerUltimaFactura();
@@ -61,6 +64,22 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         bloquearCampos();
         AutoCompleteDecorator.decorate(boxProveedorCompra);
         historialVenta();
+        ReporteCaja();
+    }
+
+    public Interfaz_Almacen() {
+
+    }
+
+    private void configurarPermisos() {
+        txtRol.setText(rol); // Muestra el rol en un TextField
+
+        if (rol.equals("Vendedor")) {
+            btnEliminarCliente.setEnabled(false);
+            //JOptionPane.showMessageDialog(this, "Acceso restringido: No puedes eliminar productos o clientes.");
+        } else if (rol.equals("Administrador")) {
+            btnEliminarCliente.setEnabled(true);
+        }
     }
 
     public DefaultTableModel getTablaVentaModel() {
@@ -90,53 +109,46 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         modelo.setColumnIdentifiers(new String[]{"Código", "Descripción", "Precio Uni", "Precio Cost", "Stock", "Proveedor"});
         TablaInventario.setModel(modelo);
 
-        // Inicializar sorter antes de usarlo en el DocumentListener
         sorter = new TableRowSorter<>(modelo);
-        TablaInventario.setRowSorter(sorter); // Asignarlo a la tabla
+        TablaInventario.setRowSorter(sorter);
 
         try {
             String query = "SELECT p.Codigo, p.Descripcion, p.Precio, p.Precio_Costo, p.Stock, pr.Proveedor "
                     + "FROM producto p INNER JOIN proveedor pr ON p.ID_Proveedor = pr.ID";
-            PreparedStatement ps = conexion.prepareStatement(query);
+            ps = conexion.prepareStatement(query);
             ResultSet rs = ps.executeQuery();
 
             while (rs.next()) {
-                String codigo = rs.getString("Codigo");
-                String descripcion = rs.getString("Descripcion");
-                double precio = rs.getDouble("Precio");
-                double precioV = rs.getDouble("Precio_Costo");
-                int stock = rs.getInt("Stock");
-                String proveedor = rs.getString("Proveedor");
-
-                // Agregar fila al modelo
-                modelo.addRow(new Object[]{codigo, descripcion, precio, precioV, stock, proveedor});
+                modelo.addRow(new Object[]{
+                    rs.getString("Codigo"),
+                    rs.getString("Descripcion"),
+                    rs.getDouble("Precio"),
+                    rs.getDouble("Precio_Costo"),
+                    rs.getInt("Stock"),
+                    rs.getString("Proveedor")
+                });
             }
-
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(null, "Error al cargar inventario: " + e.getMessage());
+            JOptionPane.showMessageDialog(null, "Error al cargar inventario: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
 
-        modelo.addTableModelListener(new TableModelListener() {
+        CalcularTotalInventario();
+
+        // **Detectar cambios y actualizar la base de datos**
+        TablaInventario.getModel().addTableModelListener(new TableModelListener() {
             @Override
             public void tableChanged(TableModelEvent e) {
                 if (e.getType() == TableModelEvent.UPDATE) {
-                    int fila = e.getFirstRow(); // Fila editada
-                    int columna = e.getColumn(); // Columna editada
-
-                    // Obtener valores de la fila editada
-                    String codigo = modelo.getValueAt(fila, 0).toString();
-                    String descripcion = modelo.getValueAt(fila, 1).toString();
-                    double precio = Double.parseDouble(modelo.getValueAt(fila, 2).toString());
-                    int stock = Integer.parseInt(modelo.getValueAt(fila, 3).toString());
-                    String proveedor = modelo.getValueAt(fila, 4).toString();
-
-                    // Actualizar la base de datos
-                    actualizarProducto(codigo, descripcion, precio, stock, proveedor);
+                    int fila = e.getFirstRow();
+                    int columna = e.getColumn();
+                    if (fila != -1 && columna != -1) {
+                        actualizarProductoDesdeTabla(fila);
+                    }
                 }
             }
         });
 
-        // Filtrar en tiempo real mientras el usuario escribe en txtBuscar
+        // **Filtrar en tiempo real**
         txtBuscar.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) {
                 filtrar();
@@ -152,13 +164,106 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
             private void filtrar() {
                 String texto = txtBuscar.getText().trim();
-                if (texto.isEmpty()) {
-                    sorter.setRowFilter(null); // Mostrar todos si está vacío
-                } else {
-                    sorter.setRowFilter(RowFilter.regexFilter("(?i)" + texto, 0, 1)); // Filtrar por Código o Descripción
-                }
+                sorter.setRowFilter(texto.isEmpty() ? null : RowFilter.regexFilter("(?i)" + texto, 0, 1));
             }
         });
+    }
+
+    //eliminar producto de la tabla del inventario
+//    private void eliminarProducto() {
+//        int filaSeleccionada = TablaInventario.getSelectedRow();
+//
+//        if (filaSeleccionada == -1) {
+//            JOptionPane.showMessageDialog(this, "Selecciona un producto para eliminar.");
+//            return;
+//        }
+//
+//        // Obtener el código del producto seleccionado
+//        String codigoProducto = TablaInventario.getValueAt(filaSeleccionada, 0).toString();
+//
+//        int confirmacion = JOptionPane.showConfirmDialog(this,
+//                "¿Estás seguro de eliminar el producto " + codigoProducto + "?",
+//                "Confirmar eliminación", JOptionPane.YES_NO_OPTION);
+//
+//        if (confirmacion == JOptionPane.YES_OPTION) {
+//            try {
+//                String sql = "UPDATE Producto SET Estado = 'Inactivo' WHERE Codigo = ?";
+//                ps = conexion.prepareStatement(sql);
+//                ps.setString(1, codigoProducto);
+//
+//                int filasAfectadas = ps.executeUpdate();
+//
+//                if (filasAfectadas > 0) {
+//                    DefaultTableModel modelo = (DefaultTableModel) TablaInventario.getModel();
+//                    modelo.removeRow(filaSeleccionada);
+//                    JOptionPane.showMessageDialog(this, "Producto eliminado correctamente.");
+//                    CalcularTotalInventario(); // Actualizar total de inventario
+//                } else {
+//                    JOptionPane.showMessageDialog(this, "No se pudo eliminar el producto.");
+//                }
+//
+//            } catch (SQLException e) {
+//                JOptionPane.showMessageDialog(this, "Error al eliminar el producto: " + e.getMessage());
+//            }
+//        }
+//    }
+    //REPORTE DE CAJA
+    public void ReporteCaja() {
+        String sql = "SELECT Metodo_Pago, Total FROM ("
+                + "SELECT mp.Pago AS Metodo_Pago, COALESCE(SUM(v.Total), 0.0) AS Total "
+                + "FROM Metodo_Pago mp "
+                + "LEFT JOIN Venta v ON mp.ID = v.ID_Pago "
+                + "GROUP BY mp.Pago "
+                + "UNION ALL "
+                + "SELECT 'DEVOLUCIONES' AS Metodo_Pago, COALESCE(SUM(v.Cambio), 0.0) AS Total "
+                + "FROM Venta v "
+                + "JOIN Metodo_Pago mp ON v.ID_Pago = mp.ID "
+                + "WHERE mp.Pago = 'EFECTIVO' "
+                + "UNION ALL "
+                + "SELECT 'TOTAL' AS Metodo_Pago, COALESCE(SUM(v.Total), 0.0) AS Total "
+                + "FROM Venta v) AS Totales";
+
+        try {
+            ps = conexion.prepareStatement(sql);
+            res = ps.executeQuery();
+
+            // Inicializar con 0.0
+            txtEfectivo.setText("0.0");
+            txtTarjeta.setText("0.0");
+            txtTransferencia.setText("0.0");
+            txtCuentaCorriente.setText("0.0");
+            txtDevoluciones.setText("0.0");
+            txtTotalCaja.setText("0.0");
+
+            while (res.next()) {
+                String metodo = res.getString("Metodo_Pago");
+                double total = res.getDouble("Total");
+
+                switch (metodo.toLowerCase()) {
+                    case "efectivo":
+                        txtEfectivo.setText(String.format("%.2f", total));
+                        break;
+                    case "tarjeta":
+                        txtTarjeta.setText(String.format("%.2f", total));
+                        break;
+                    case "tranferencia":
+                        txtTransferencia.setText(String.format("%.2f", total));
+                        break;
+                    case "correspondencia":
+                        txtCuentaCorriente.setText(String.format("%.2f", total));
+                        break;
+                    case "devoluciones":
+                        txtDevoluciones.setText(String.format("%.2f", total));
+                        break;
+                    case "total":
+                        txtTotalCaja.setText(String.format("%.2f", total));
+                        break;
+                }
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public void exportarAExcel() {
@@ -221,12 +326,24 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 ResultSet rs = pst.executeQuery();
 
                 if (rs.next()) {
+                    int stock = rs.getInt("Stock"); // Obtener el stock del producto
+
+                    if (stock == 0) {
+                        JOptionPane.showMessageDialog(null, "No hay stock de este producto.", "Sin Stock", JOptionPane.WARNING_MESSAGE);
+                        txtrefcodigo.setText("");
+                        return; // No cargar el producto
+                    }
+
                     txtDescripcionP.setText(rs.getString("Descripcion"));
                     txtPrecioP.setText(rs.getString("Precio"));
-                    txtStockP.setText(rs.getString("Stock"));
+                    txtStockP.setText(String.valueOf(stock));
                     txtCantidad.setEnabled(true);
+
+                    if (stock == 1) {
+                        JOptionPane.showMessageDialog(null, "¡Atención! Solo queda 1 en stock.", "Stock Bajo", JOptionPane.INFORMATION_MESSAGE);
+                    }
                 } else {
-                    JOptionPane.showMessageDialog(null, "Producto no encontrado");
+                    JOptionPane.showMessageDialog(null, "Producto no encontrado", "Error", JOptionPane.ERROR_MESSAGE);
                 }
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -345,10 +462,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             while (rs.next()) {
                 int id = rs.getInt("ID");
                 String nombre = rs.getString("Nombre");
-                String cliente = id + " - " + nombre;
 
-                System.out.println("Cliente cargado: " + cliente); // Verifica qué se está agregando
-                boxCliente.addItem(cliente);
+                // 🔹 Agregamos "ID - Nombre" en el JComboBox
+                boxCliente.addItem(id + " - " + nombre);
                 count++;
             }
 
@@ -366,29 +482,54 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         }
     }
 
+    //Cliente
+    private void CargarClientes() {
+        DefaultTableModel modelo = (DefaultTableModel) TablaCliente.getModel();
+        modelo.setRowCount(0); // Limpiar tabla antes de cargar datos
+
+        try {
+            String sql = "SELECT Cedula, Nombre, Apellido, Telefono, Direccion FROM Cliente";
+            ps = conexion.prepareStatement(sql);
+            res = ps.executeQuery();
+
+            while (res.next()) {
+                Object[] fila = {
+                    res.getString("Cedula"),
+                    res.getString("Nombre"),
+                    res.getString("Apellido"),
+                    res.getString("Telefono"),
+                    res.getString("Direccion")
+                };
+                modelo.addRow(fila);
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error al cargar los clientes: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private void AgregarCliente() {
         String Cedula = txtCedula.getText().trim();
-        String Nombre = txtNombre.getText();
-        String Apellido = txtApellido.getText();
+        String Nombre = txtNombre.getText().trim();
+        String Apellido = txtApellido.getText().trim();
         String Telefono = txtTelefono.getText().trim();
-        String Direccion = txtDireccion.getText();
+        String Direccion = txtDireccion.getText().trim();
 
         if (Nombre.isEmpty() || Apellido.isEmpty() || Telefono.isEmpty()) {
             JOptionPane.showMessageDialog(null, "Llenar los campos obligatorios", "Error", JOptionPane.ERROR_MESSAGE);
         } else {
             try {
-                int CedulaInt = Integer.parseInt(Cedula);
-                int TelefonoInt = Integer.parseInt(Telefono);
-                ps = conexion.prepareStatement("INSERT INTO Cliente (Cedula, Nombre, Apellido, Telefono, Direccion) VALUES (?,?,?,?,?)");
-                ps.setInt(1, CedulaInt);
+                String sql = "INSERT INTO Cliente (Cedula, Nombre, Apellido, Telefono, Direccion) VALUES (?, ?, ?, ?, ?)";
+                ps = conexion.prepareStatement(sql);
+                ps.setString(1, Cedula);
                 ps.setString(2, Nombre);
                 ps.setString(3, Apellido);
-                ps.setInt(4, TelefonoInt);
+                ps.setString(4, Telefono);
                 ps.setString(5, Direccion);
 
                 int res = ps.executeUpdate();
                 if (res > 0) {
                     JOptionPane.showMessageDialog(null, "Cliente Agregado Correctamente", "Mensaje", JOptionPane.INFORMATION_MESSAGE);
+                    CargarClientes(); // Actualiza la tabla después de agregar
                 }
             } catch (SQLException e) {
                 JOptionPane.showMessageDialog(null, "Error en la base de datos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -396,26 +537,105 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         }
     }
 
-    private void actualizarStock() {
-        String codigo = txtRefCodigoCompra.getText().trim();
-        int cantidad = Integer.parseInt(txtCantidadCompra.getText());
+    private void EliminarCliente() {
+        int filaSeleccionada = TablaCliente.getSelectedRow();
+
+        if (filaSeleccionada == -1) {
+            JOptionPane.showMessageDialog(null, "Seleccione un cliente para eliminar", "Advertencia", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String Cedula = TablaCliente.getValueAt(filaSeleccionada, 0).toString();
+
+        int confirmacion = JOptionPane.showConfirmDialog(null, "¿Seguro que deseas eliminar este cliente?", "Confirmar eliminación", JOptionPane.YES_NO_OPTION);
+        if (confirmacion == JOptionPane.YES_OPTION) {
+            try {
+                String sql = "DELETE FROM Cliente WHERE Cedula = ?";
+                ps = conexion.prepareStatement(sql);
+                ps.setString(1, Cedula);
+
+                int res = ps.executeUpdate();
+                if (res > 0) {
+                    JOptionPane.showMessageDialog(null, "Cliente eliminado correctamente", "Mensaje", JOptionPane.INFORMATION_MESSAGE);
+                    CargarClientes(); // Actualiza la tabla después de eliminar
+                }
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(null, "Error en la base de datos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void BuscarCliente() {
+        String filtro = txtBuscar.getText().trim();
+        DefaultTableModel modelo = (DefaultTableModel) TablaCliente.getModel();
+        modelo.setRowCount(0); // Limpiar tabla antes de cargar datos
 
         try {
-            String sql = "UPDATE producto SET Stock = Stock + ? WHERE Codigo = ?";
-            PreparedStatement pst = conexion.prepareStatement(sql);
-            pst.setInt(1, cantidad);
-            pst.setString(2, codigo);
+            String sql = "SELECT Cedula, Nombre, Apellido, Telefono, Direccion FROM Cliente WHERE "
+                    + "Cedula LIKE ? OR Nombre LIKE ? OR Apellido LIKE ? OR Telefono LIKE ?";
+            ps = conexion.prepareStatement(sql);
+            ps.setString(1, "%" + filtro + "%");
+            ps.setString(2, "%" + filtro + "%");
+            ps.setString(3, "%" + filtro + "%");
+            ps.setString(4, "%" + filtro + "%");
 
-            int filas = pst.executeUpdate();
-            if (filas > 0) {
-                JOptionPane.showMessageDialog(null, "Stock actualizado correctamente.");
+            res = ps.executeQuery();
 
-                // REFRESCAR STOCK EN EL TEXTFIELD
-                int nuevoStock = Integer.parseInt(txtStockCompra.getText()) + cantidad;
-                txtStockCompra.setText(String.valueOf(nuevoStock));
+            while (res.next()) {
+                Object[] fila = {
+                    res.getString("Cedula"),
+                    res.getString("Nombre"),
+                    res.getString("Apellido"),
+                    res.getString("Telefono"),
+                    res.getString("Direccion")
+                };
+                modelo.addRow(fila);
             }
         } catch (SQLException e) {
-            JOptionPane.showMessageDialog(null, "Error al actualizar el stock: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(null, "Error en la búsqueda: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void actualizarCliente(int fila, int columna) {
+        String CedulaAnterior = TablaCliente.getValueAt(fila, 0).toString(); // Obtener la cédula antes del cambio
+        String Columna = TablaCliente.getColumnName(columna);
+        String NuevoValor = TablaCliente.getValueAt(fila, columna).toString();
+
+        try {
+
+            if (Columna.equalsIgnoreCase("Nit/Cedula")) {
+                // Si se cambia la cédula, actualizar toda la fila
+                String NuevaCedula = NuevoValor;
+                String Nombre = TablaCliente.getValueAt(fila, 1).toString();
+                String Apellido = TablaCliente.getValueAt(fila, 2).toString();
+                String Telefono = TablaCliente.getValueAt(fila, 3).toString();
+                String Direccion = TablaCliente.getValueAt(fila, 4).toString();
+
+                String sql = "UPDATE Cliente SET Cedula = ?, Nombres = ?, Apellidos = ?, Telefono = ?, Direccion = ? WHERE Cedula = ?";
+                ps = conexion.prepareStatement(sql);
+                ps.setString(1, NuevaCedula);
+                ps.setString(2, Nombre);
+                ps.setString(3, Apellido);
+                ps.setString(4, Telefono);
+                ps.setString(5, Direccion);
+                ps.setString(6, CedulaAnterior);
+            } else {
+                // Si se cambia otro dato, solo actualizar esa columna
+                String sql = "UPDATE Cliente SET " + Columna + " = ? WHERE Cedula = ?";
+                ps = conexion.prepareStatement(sql);
+                ps.setString(1, NuevoValor);
+                ps.setString(2, CedulaAnterior);
+            }
+
+            int res = ps.executeUpdate();
+            if (res > 0) {
+                String nombreCliente = TablaCliente.getValueAt(fila, 1).toString(); // Obtener el nombre
+                JOptionPane.showMessageDialog(null, "Información del cliente '" + nombreCliente + "' actualizada correctamente.", "Actualización", JOptionPane.INFORMATION_MESSAGE);
+            }
+
+            conexion.close();
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error al actualizar cliente: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -432,11 +652,18 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             return;
         }
 
-        // Obtener el cliente seleccionado
-        String clienteSeleccionado = obtenerClienteSeleccionado();
-        String[] partesCliente = clienteSeleccionado.split(" - ");
-        int idCliente = Integer.parseInt(partesCliente[0]); // Extraer el ID del cliente
-        String nombreCliente = partesCliente[1]; // Extraer el nombre del cliente
+        // 🔹 Obtener el cliente seleccionado
+        String clienteSeleccionado = (String) boxCliente.getSelectedItem();
+
+        if (clienteSeleccionado == null) {
+            JOptionPane.showMessageDialog(null, "No se seleccionó un cliente válido.");
+            return;
+        }
+
+        // 🔹 Extraer el ID y el nombre del cliente
+        String[] partesCliente = clienteSeleccionado.split(" - ", 2);
+        int idCliente = Integer.parseInt(partesCliente[0]); // ID del cliente
+        String nombreCliente = partesCliente[1]; // Nombre del cliente
 
         // Obtener los productos de la tabla
         List<String> productos = new ArrayList<>();
@@ -455,15 +682,29 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         }
 
-        // Abrir la ventana de pago con total, ID del cliente, nombre del cliente y productos
-        Interfaz_Pago ventanaPago = new Interfaz_Pago(total, idCliente, nombreCliente, productos);
+        // 🔹 Pasamos 'this' para poder limpiar la tabla desde Interfaz_Pago
+        Interfaz_Pago ventanaPago = new Interfaz_Pago(this, total, idCliente, nombreCliente, productos);
         ventanaPago.setVisible(true);
         ventanaPago.setLocationRelativeTo(null);
     }
 
-    private void actualizarProducto(String codigo, String descripcion, double precio, int stock, String proveedor) {
+    public void limpiarTablaVenta() {
+        DefaultTableModel modelo = (DefaultTableModel) TablaVenta.getModel();
+        modelo.setRowCount(0); // Borra todas las filas de la tabla
+    }
+
+    private void actualizarProductoDesdeTabla(int fila) {
+        DefaultTableModel modelo = (DefaultTableModel) TablaInventario.getModel();
+
+        String codigo = modelo.getValueAt(fila, 0).toString();
+        String descripcion = modelo.getValueAt(fila, 1).toString();
+        double precio = Double.parseDouble(modelo.getValueAt(fila, 2).toString());
+        double precioCosto = Double.parseDouble(modelo.getValueAt(fila, 3).toString());
+        int stock = Integer.parseInt(modelo.getValueAt(fila, 4).toString());
+        String proveedor = modelo.getValueAt(fila, 5).toString();
+
         try {
-            // Obtener ID del proveedor
+            // **Obtener ID del proveedor**
             String queryProveedor = "SELECT ID FROM proveedor WHERE Proveedor = ?";
             PreparedStatement psProveedor = conexion.prepareStatement(queryProveedor);
             psProveedor.setString(1, proveedor);
@@ -473,7 +714,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             if (rsProveedor.next()) {
                 idProveedor = rsProveedor.getInt("ID");
             } else {
-                // Si el proveedor no existe, insertarlo
+                // **Si el proveedor no existe, insertarlo**
                 String insertProveedor = "INSERT INTO proveedor(Proveedor) VALUES (?)";
                 PreparedStatement psInsertProveedor = conexion.prepareStatement(insertProveedor, Statement.RETURN_GENERATED_KEYS);
                 psInsertProveedor.setString(1, proveedor);
@@ -485,25 +726,27 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 }
             }
 
-            // Actualizar el producto en la base de datos
-            String query = "UPDATE producto SET Descripcion=?, Precio=?, Stock=?, ID_Proveedor=? WHERE Codigo=?";
-            PreparedStatement ps = conexion.prepareStatement(query);
+            // **Actualizar el producto en la base de datos**
+            String query = "UPDATE producto SET Descripcion=?, Precio=?, Precio_Costo=?, Stock=?, ID_Proveedor=? WHERE Codigo=?";
+            ps = conexion.prepareStatement(query);
             ps.setString(1, descripcion);
             ps.setDouble(2, precio);
-            ps.setInt(3, stock);
-            ps.setInt(4, idProveedor);
-            ps.setString(5, codigo);
+            ps.setDouble(3, precioCosto);
+            ps.setInt(4, stock);
+            ps.setInt(5, idProveedor);
+            ps.setString(6, codigo);
 
             int resultado = ps.executeUpdate();
             if (resultado > 0) {
-                JOptionPane.showMessageDialog(null, "Producto actualizado correctamente");
+                JOptionPane.showMessageDialog(null, "Producto '" + descripcion + "' actualizado correctamente.", "Actualización", JOptionPane.INFORMATION_MESSAGE);
             } else {
                 JOptionPane.showMessageDialog(null, "Error al actualizar el producto", "Error", JOptionPane.ERROR_MESSAGE);
             }
-
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(null, "Error en la base de datos: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
+
+        CalcularTotalInventario(); // **Recalcular total tras actualización**
     }
 
     private void configurarTablaVenta() {
@@ -535,9 +778,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         try {
             String sql = "SELECT Descripcion, Precio, Stock FROM producto WHERE Codigo = ?";
-            PreparedStatement pst = conexion.prepareStatement(sql);
-            pst.setString(1, codigo);
-            ResultSet rs = pst.executeQuery();
+            ps = conexion.prepareStatement(sql);
+            ps.setString(1, codigo);
+            ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
                 // Si el producto existe, carga los datos
@@ -568,7 +811,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         boxProveedorCompra.removeAllItems(); // Limpiar el comboBox antes de llenarlo
         try {
             String query = "SELECT ID, Proveedor FROM proveedor";  // Obtener ID y Nombre
-            PreparedStatement ps = conexion.prepareStatement(query);
+            ps = conexion.prepareStatement(query);
             res = ps.executeQuery();
 
             while (res.next()) {
@@ -583,18 +826,55 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         }
     }
 
+    private int obtenerIdProveedor(String proveedor) throws SQLException {
+        String query = "SELECT ID FROM Proveedor WHERE Proveedor = ?";
+        ps = conexion.prepareStatement(query);
+        ps.setString(1, proveedor);
+        res = ps.executeQuery();
+        if (res.next()) {
+            return res.getInt("ID");
+        } else {
+            String insertProveedor = "INSERT INTO Proveedor (Proveedor) VALUES (?)";
+            ps = conexion.prepareStatement(insertProveedor, Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, proveedor);
+            ps.executeUpdate();
+            res = ps.getGeneratedKeys();
+            return res.next() ? res.getInt(1) : -1;
+        }
+    }
+
     private void configurarTablaCompra() {
         DefaultTableModel model = new DefaultTableModel();
-        model.setColumnIdentifiers(new String[]{"Código", "Descripción", "Cantidad", "Precio Costo", "Precio Venta", "Stock"});
+        model.setColumnIdentifiers(new String[]{"Código", "Descripción", "Cantidad", "Precio Costo", "Precio Venta", "Stock", "Proveedor"});
         model.setRowCount(0);
         TablaCompra.setModel(model);
     }
 
     private void configurarTablaCliente() {
-        DefaultTableModel model = new DefaultTableModel();
+        DefaultTableModel model = new DefaultTableModel() {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return true; // Permitir edición en todas las celdas
+            }
+        };
+
         model.setColumnIdentifiers(new String[]{"Nit/Cedula", "Nombres", "Apellidos", "Telefono", "Direccion"});
         model.setRowCount(0);
         TablaCliente.setModel(model);
+
+        // Agregar listener para detectar cambios y actualizar en la base de datos
+        TablaCliente.getModel().addTableModelListener(new TableModelListener() {
+            @Override
+            public void tableChanged(TableModelEvent e) {
+                if (e.getType() == TableModelEvent.UPDATE) {
+                    int fila = e.getFirstRow();
+                    int columna = e.getColumn();
+                    if (fila != -1 && columna != -1) {
+                        actualizarCliente(fila, columna);
+                    }
+                }
+            }
+        });
     }
 
     private void limpiarCampos() {
@@ -630,100 +910,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtStockCompra.setEnabled(false);
         txtCantidadCompra.setEnabled(false);
         boxProveedorCompra.setEnabled(false);
-    }
-
-    private void agregarProductoNuevo() {
-        String codigo = txtRefCodigoCompra.getText().trim();
-        String descripcion = txtDescripcionCompra.getText().trim();
-        String precioVenta = txtPrecioVentaCompra.getText().trim();
-        String precioCosto = txtPrecioCostoCompra.getText().trim();
-        String nombreProveedor = boxProveedorCompra.getSelectedItem().toString().trim();
-        String cantidadStr = txtCantidadCompra.getText().trim();
-
-        if (codigo.isEmpty() || descripcion.isEmpty() || precioVenta.isEmpty() || precioCosto.isEmpty() || nombreProveedor.isEmpty() || cantidadStr.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "Completa todos los campos antes de agregar el producto.", "Error", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        try {
-            int cantidad = Integer.parseInt(cantidadStr); // Convertir cantidad a entero
-            if (cantidad <= 0) {
-                JOptionPane.showMessageDialog(null, "La cantidad debe ser mayor a 0.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            conexion.setAutoCommit(false);
-
-            // 🔹 1. OBTENER O INSERTAR PROVEEDOR
-            String sqlProveedor = "SELECT ID FROM Proveedor WHERE Proveedor = ?";
-            PreparedStatement pstProveedor = conexion.prepareStatement(sqlProveedor);
-            pstProveedor.setString(1, nombreProveedor);
-            ResultSet rsProveedor = pstProveedor.executeQuery();
-
-            int idProveedor;
-            if (rsProveedor.next()) {
-                idProveedor = rsProveedor.getInt("ID");
-            } else {
-                // 🔹 INSERTAR NUEVO PROVEEDOR
-                String sqlInsertProveedor = "INSERT INTO Proveedor (Proveedor) VALUES (?)";
-                PreparedStatement pstInsertProveedor = conexion.prepareStatement(sqlInsertProveedor, Statement.RETURN_GENERATED_KEYS);
-                pstInsertProveedor.setString(1, nombreProveedor);
-                pstInsertProveedor.executeUpdate();
-
-                cargarProveedores();
-
-                // 🔹 OBTENER EL NUEVO ID DEL PROVEEDOR
-                ResultSet rsNuevoProveedor = pstInsertProveedor.getGeneratedKeys();
-                if (rsNuevoProveedor.next()) {
-                    idProveedor = rsNuevoProveedor.getInt(1);
-                } else {
-                    throw new SQLException("No se pudo obtener el ID del proveedor recién insertado.");
-                }
-            }
-
-            // 🔹 2. INSERTAR PRODUCTO CON STOCK INICIAL SEGÚN LA CANTIDAD INGRESADA
-            String sql = "INSERT INTO Producto (Codigo, Descripcion, ID_Proveedor, Precio, Precio_Costo, Stock) VALUES (?, ?, ?, ?, ?, ?)";
-            PreparedStatement pst = conexion.prepareStatement(sql);
-            pst.setString(1, codigo);
-            pst.setString(2, descripcion);
-            pst.setInt(3, idProveedor);
-            pst.setDouble(4, Double.parseDouble(precioVenta));
-            pst.setDouble(5, Double.parseDouble(precioCosto));
-            pst.setInt(6, cantidad); // 🔹 ASIGNAR LA CANTIDAD INGRESADA COMO STOCK INICIAL
-
-            int filas = pst.executeUpdate();
-            if (filas > 0) {
-                conexion.commit();
-                JOptionPane.showMessageDialog(null, "Producto agregado correctamente.");
-
-                // 🔹 3. ACTUALIZAR CAMPOS DE STOCK Y HABILITAR CANTIDAD
-                txtStockCompra.setText(String.valueOf(cantidad));
-                txtCantidadCompra.setEnabled(true);
-
-                // 🔹 4. AGREGAR EL PRODUCTO A LA TABLA DE COMPRA
-                DefaultTableModel model = (DefaultTableModel) TablaCompra.getModel();
-                model.addRow(new Object[]{codigo, descripcion, cantidad, precioCosto, precioVenta, cantidad});
-            } else {
-                conexion.rollback();
-                JOptionPane.showMessageDialog(null, "Error: No se pudo agregar el producto.", "Error", JOptionPane.ERROR_MESSAGE);
-            }
-
-        } catch (SQLException e) {
-            try {
-                conexion.rollback();
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
-            JOptionPane.showMessageDialog(null, "Error al agregar producto: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(null, "Error: La cantidad debe ser un número válido.", "Error", JOptionPane.ERROR_MESSAGE);
-        } finally {
-            try {
-                conexion.setAutoCommit(true);
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
-        }
     }
 
     //historial venta
@@ -811,23 +997,22 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     public void buscarPorFecha() {
-        String fechaInicio = txtFechaInicial.getText().trim();
-        String fechaFin = txtFechaFin.getText().trim();
+        String fechaInicio = convertirFecha(txtFechaInicial.getText().trim());
+        String fechaFin = convertirFecha(txtFechaFin.getText().trim());
 
-        if (fechaInicio.isEmpty() || fechaFin.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "Por favor, ingrese ambas fechas para filtrar.");
-            return;
+        if (fechaInicio == null || fechaFin == null) {
+            return; // Si la conversión falla, salir del método
         }
 
         DefaultTableModel modelo = (DefaultTableModel) TablaVentaHistorial.getModel();
         modelo.setRowCount(0); // Limpiar la tabla antes de agregar nuevos datos
 
-        String sql = "SELECT v.Fecha_Venta, c.Nombre AS Cliente, p.Nombre AS Producto, f.Precio, f.Cantidad, (f.Precio * f.Cantidad) AS Total "
+        String sql = "SELECT v.Fecha_Venta, c.Nombre AS Cliente, p.Descripcion AS Producto, f.Precio, f.Cantidad, (f.Precio * f.Cantidad) AS Total "
                 + "FROM Venta v "
                 + "JOIN Factura f ON v.ID = f.ID_Venta "
                 + "JOIN Cliente c ON v.ID_Cliente = c.ID "
                 + "JOIN Producto p ON f.ID_Producto = p.Codigo "
-                + "WHERE v.Fecha_Venta BETWEEN ? AND ? "
+                + "WHERE DATE(v.Fecha_Venta) BETWEEN ? AND ? "
                 + "ORDER BY v.Fecha_Venta DESC";
 
         try {
@@ -854,6 +1039,240 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     /**
+     * Convierte una fecha ingresada por el usuario en formato "D-M-YYYY" o
+     * "DD-MM-YYYY" a "YYYY-MM-DD"
+     */
+    private String convertirFecha(String fechaUsuario) {
+        try {
+            DateTimeFormatter formatterEntrada = DateTimeFormatter.ofPattern("d-M-yyyy");
+            DateTimeFormatter formatterSalida = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+            LocalDate fecha = LocalDate.parse(fechaUsuario, formatterEntrada);
+            return fecha.format(formatterSalida);
+        } catch (DateTimeParseException e) {
+            JOptionPane.showMessageDialog(null, "Formato de fecha inválido. Use DD-MM-YYYY.");
+            return null;
+        }
+    }
+
+    //Historial Compra
+    public void historialCompra() {
+        String fechaInicio = txtFechaInicial2.getText().trim();
+        String fechaFin = txtFechaFin2.getText().trim();
+
+        DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
+        modelo.setColumnIdentifiers(new String[]{"Fecha de Compra", "Proveedor", "Producto", "Precio Costo", "Cantidad", "Total"});
+        modelo.setRowCount(0); // Limpiar la tabla antes de agregar nuevos datos
+
+        // Base de la consulta SQL
+        String sql = "SELECT c.Fecha, p.Proveedor AS Proveedor, pr.Descripcion AS Producto, dc.Precio_Costo, dc.Cantidad, (dc.Precio_Costo * dc.Cantidad) AS Total "
+                + "FROM Compra c "
+                + "JOIN Detalle_Compra dc ON c.ID = dc.ID_Compra "
+                + "JOIN Proveedor p ON c.ID_Proveedor = p.ID "
+                + "JOIN Producto pr ON dc.ID_Producto = pr.Codigo ";
+
+        // Agregar filtro de fecha si se ingresan valores
+        if (!fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
+            sql += "WHERE c.Fecha BETWEEN ? AND ? ";
+        }
+
+        sql += "ORDER BY c.Fecha DESC"; // Ordenar por fecha
+
+        try {
+            ps = conexion.prepareStatement(sql);
+            if (!fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
+                ps.setString(1, fechaInicio);
+                ps.setString(2, fechaFin);
+            }
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                Object[] fila = {
+                    rs.getString("Fecha"),
+                    rs.getString("Proveedor"),
+                    rs.getString("Producto"),
+                    rs.getDouble("Precio_Costo"),
+                    rs.getInt("Cantidad"),
+                    rs.getDouble("Total")
+                };
+                modelo.addRow(fila);
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error al cargar compras: " + e.getMessage());
+        }
+    }
+
+// Función para exportar el historial de compras a Excel
+    public void exportarHistorialCompra() {
+        DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
+        Workbook libro = new XSSFWorkbook();
+        Sheet hoja = libro.createSheet("Historial de Compras");
+
+        Row filaEncabezado = hoja.createRow(0);
+        for (int i = 0; i < modelo.getColumnCount(); i++) {
+            Cell celda = filaEncabezado.createCell(i);
+            celda.setCellValue(modelo.getColumnName(i));
+        }
+
+        for (int i = 0; i < modelo.getRowCount(); i++) {
+            Row fila = hoja.createRow(i + 1);
+            for (int j = 0; j < modelo.getColumnCount(); j++) {
+                Cell celda = fila.createCell(j);
+                Object valor = modelo.getValueAt(i, j);
+                if (valor != null) {
+                    celda.setCellValue(valor.toString());
+                }
+            }
+        }
+
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Guardar archivo Excel");
+        int seleccionUsuario = fileChooser.showSaveDialog(null);
+        if (seleccionUsuario == JFileChooser.APPROVE_OPTION) {
+            try (FileOutputStream archivo = new FileOutputStream(fileChooser.getSelectedFile() + ".xlsx")) {
+                libro.write(archivo);
+                JOptionPane.showMessageDialog(null, "Historial exportado correctamente.");
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(null, "Error al exportar: " + e.getMessage());
+            }
+        }
+    }
+
+// Función para buscar compras por fecha
+    public void buscarCompraPorFecha() {
+        String fechaInicio = convertirFecha(txtFechaInicial2.getText().trim());
+        String fechaFin = convertirFecha(txtFechaFin2.getText().trim());
+
+        if (fechaInicio == null || fechaFin == null) {
+            return; // Si la conversión falla, salir del método
+        }
+
+        DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
+        modelo.setRowCount(0); // Limpiar la tabla antes de agregar nuevos datos
+
+        String sql = "SELECT c.Fecha, p.Proveedor AS Proveedor, pr.Descripcion AS Producto, dc.Precio_Costo, dc.Cantidad, (dc.Precio_Costo * dc.Cantidad) AS Total "
+                + "FROM Compra c "
+                + "JOIN Detalle_Compra dc ON c.ID = dc.ID_Compra "
+                + "JOIN Proveedor p ON c.ID_Proveedor = p.ID "
+                + "JOIN Producto pr ON dc.ID_Producto = pr.Codigo "
+                + "WHERE DATE(c.Fecha) BETWEEN ? AND ? "
+                + "ORDER BY c.Fecha DESC";
+
+        try {
+            ps = conexion.prepareStatement(sql);
+            ps.setString(1, fechaInicio);
+            ps.setString(2, fechaFin);
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                Object[] fila = {
+                    rs.getString("Fecha"),
+                    rs.getString("Proveedor"),
+                    rs.getString("Producto"),
+                    rs.getDouble("Precio_Costo"),
+                    rs.getInt("Cantidad"),
+                    rs.getDouble("Total")
+                };
+                modelo.addRow(fila);
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error al filtrar compras: " + e.getMessage());
+        }
+    }
+
+    //calcular el total en el inventario
+    private void CalcularTotalInventario() {
+        double total = 0;
+
+        for (int i = 0; i < TablaInventario.getRowCount(); i++) {
+            try {
+                // Asegurar que no hay valores nulos antes de convertir
+                Object precioObj = TablaInventario.getValueAt(i, 2);
+                Object cantidadObj = TablaInventario.getValueAt(i, 4);
+
+                if (precioObj != null && cantidadObj != null) {
+                    double precio = Double.parseDouble(precioObj.toString()); // Precio unitario
+                    int cantidad = Integer.parseInt(cantidadObj.toString()); // Stock disponible
+
+                    total += precio * cantidad;
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Error al convertir valores en la fila " + i + ": " + e.getMessage());
+            }
+        }
+
+        System.out.println("Total Inventario: " + total); // Verificar en la consola
+
+        // Asegurar que txtIngresoTotal no es nulo antes de actualizarlo
+        if (txtIngresoTotal != null) {
+            txtIngresoTotal.setText(String.format("%.2f", total));
+        } else {
+            System.out.println("txtIngresoTotal es NULL. Verifica su inicialización.");
+        }
+    }
+
+    //Quitar un producto en la tabla compra
+    private void QuitarProductoCompra() {
+        DefaultTableModel modelo = (DefaultTableModel) TablaCompra.getModel();
+        int filaSeleccionada = TablaCompra.getSelectedRow();
+
+        if (filaSeleccionada == -1) {
+            JOptionPane.showMessageDialog(null, "Seleccione una fila para eliminar.", "Advertencia", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        modelo.removeRow(filaSeleccionada);
+    }
+
+    //Quitar un producto en la Tabla Venta
+    private void QuitarProductoVenta() {
+        DefaultTableModel modelo = (DefaultTableModel) TablaVenta.getModel();
+        int filaSeleccionada = TablaVenta.getSelectedRow();
+
+        if (filaSeleccionada == -1) {
+            JOptionPane.showMessageDialog(null, "Seleccione una fila para eliminar.", "Advertencia", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Eliminar la fila seleccionada
+        modelo.removeRow(filaSeleccionada);
+
+        // Actualizar el total después de quitar el producto
+        txtTotalV.setText(String.format("%.2f", calcularTotal()));
+    }
+
+    //stock bajo en la tabla producto
+    public void filtrarStockBajo() {
+        DefaultTableModel modelo = (DefaultTableModel) TablaInventario.getModel();
+        modelo.setRowCount(0); // Limpiar la tabla antes de agregar nuevos datos
+
+        String sql = "SELECT p.Codigo, p.Descripcion, p.Precio, p.Precio_Costo, p.Stock, pr.Proveedor AS Proveedor "
+                + "FROM Producto p "
+                + "LEFT JOIN Proveedor pr ON p.ID_Proveedor = pr.ID "
+                + "WHERE p.Stock <= 1";
+
+        try {
+            ps = conexion.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                Object[] fila = {
+                    rs.getString("Codigo"),
+                    rs.getString("Descripcion"),
+                    rs.getDouble("Precio"),
+                    rs.getDouble("Precio_Costo"),
+                    rs.getInt("Stock"),
+                    rs.getString("Proveedor")
+                };
+                modelo.addRow(fila);
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(null, "Error al filtrar productos con bajo stock: " + e.getMessage());
+        }
+    }
+
+    /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
      * regenerated by the Form Editor.
@@ -871,26 +1290,28 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jButton5 = new javax.swing.JButton();
         jButton6 = new javax.swing.JButton();
         jLabel32 = new javax.swing.JLabel();
-        jLabel34 = new javax.swing.JLabel();
-        jLabel35 = new javax.swing.JLabel();
+        jButton7 = new javax.swing.JButton();
         jPanel11 = new javax.swing.JPanel();
+        jLabel34 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
+        txtRol = new javax.swing.JTextField();
+        btnSalir = new javax.swing.JButton();
         jTabbedPane1 = new javax.swing.JTabbedPane();
         ReporteCaja = new javax.swing.JPanel();
         jPanel10 = new javax.swing.JPanel();
         jLabel4 = new javax.swing.JLabel();
         jLabel5 = new javax.swing.JLabel();
-        txtEfectivo = new javax.swing.JTextField();
+        txtTotalCaja = new javax.swing.JTextField();
         jLabel6 = new javax.swing.JLabel();
         jLabel7 = new javax.swing.JLabel();
         jLabel8 = new javax.swing.JLabel();
-        txtEfectivo1 = new javax.swing.JTextField();
-        txtEfectivo2 = new javax.swing.JTextField();
-        txtEfectivo3 = new javax.swing.JTextField();
+        txtEfectivo = new javax.swing.JTextField();
+        txtTarjeta = new javax.swing.JTextField();
+        txtTransferencia = new javax.swing.JTextField();
         jLabel9 = new javax.swing.JLabel();
-        txtEfectivo4 = new javax.swing.JTextField();
+        txtCuentaCorriente = new javax.swing.JTextField();
         jLabel10 = new javax.swing.JLabel();
-        txtEfectivo5 = new javax.swing.JTextField();
+        txtDevoluciones = new javax.swing.JTextField();
         Inventario = new javax.swing.JPanel();
         jPanel5 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
@@ -900,9 +1321,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtBuscar = new javax.swing.JTextField();
         txtExportar = new javax.swing.JButton();
         jButton9 = new javax.swing.JButton();
-        jButton12 = new javax.swing.JButton();
+        btnStock = new javax.swing.JButton();
         jLabel36 = new javax.swing.JLabel();
         txtIngresoTotal = new javax.swing.JTextField();
+        btnActualizarInventario = new javax.swing.JButton();
         Venta = new javax.swing.JPanel();
         jPanel12 = new javax.swing.JPanel();
         jPanel16 = new javax.swing.JPanel();
@@ -945,8 +1367,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel22 = new javax.swing.JLabel();
         jLabel23 = new javax.swing.JLabel();
         txtCedula = new javax.swing.JTextField();
-        btnAgregar = new javax.swing.JButton();
-        btnAgregar1 = new javax.swing.JButton();
+        btnEliminarCliente = new javax.swing.JButton();
+        btnAgregarCliente = new javax.swing.JButton();
         CompraInventario = new javax.swing.JPanel();
         jPanel14 = new javax.swing.JPanel();
         jScrollPane5 = new javax.swing.JScrollPane();
@@ -971,6 +1393,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel41 = new javax.swing.JLabel();
         boxProveedorCompra = new javax.swing.JComboBox<>();
         btnAgregarCompra = new javax.swing.JButton();
+        btnQuitarCompra = new javax.swing.JButton();
         btnFinalizarCompra = new javax.swing.JButton();
         HistorialVenta = new javax.swing.JPanel();
         jPanel15 = new javax.swing.JPanel();
@@ -982,9 +1405,24 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtFechaFin = new javax.swing.JTextField();
         txtFechaInicial = new javax.swing.JTextField();
         jLabel42 = new javax.swing.JLabel();
-        txtBuscarFechaVenta = new javax.swing.JButton();
+        btnBuscarFechaVenta = new javax.swing.JButton();
         jLabel43 = new javax.swing.JLabel();
         jLabel44 = new javax.swing.JLabel();
+        btnActualizarHistorialVenta = new javax.swing.JButton();
+        HistorialCompra = new javax.swing.JPanel();
+        jPanel2 = new javax.swing.JPanel();
+        jLabel35 = new javax.swing.JLabel();
+        jScrollPane6 = new javax.swing.JScrollPane();
+        TablaHistorialCompra = new javax.swing.JTable();
+        jLabel45 = new javax.swing.JLabel();
+        txtFechaInicial2 = new javax.swing.JTextField();
+        jLabel46 = new javax.swing.JLabel();
+        jLabel47 = new javax.swing.JLabel();
+        txtFechaFin2 = new javax.swing.JTextField();
+        jLabel48 = new javax.swing.JLabel();
+        btnBuscarFechaCompra = new javax.swing.JButton();
+        btnExportarCompra = new javax.swing.JButton();
+        btnActualizarHistorialCompra = new javax.swing.JButton();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -993,7 +1431,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jPanel4.setBackground(new java.awt.Color(50, 101, 255));
 
-        jButton1.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton1.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jButton1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/cajero-automatico.png"))); // NOI18N
         jButton1.setText("REPORTE CAJA");
         jButton1.setBorder(null);
@@ -1003,7 +1441,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
 
-        jButton2.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton2.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jButton2.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/anadir-al-carrito.png"))); // NOI18N
         jButton2.setText("COMPRA");
         jButton2.setBorder(null);
@@ -1013,7 +1451,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
 
-        jButton3.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton3.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jButton3.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/ventas.png"))); // NOI18N
         jButton3.setText("VENTA");
         jButton3.setBorder(null);
@@ -1023,7 +1461,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
 
-        jButton4.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton4.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jButton4.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/inventario.png"))); // NOI18N
         jButton4.setText("INVENTARIO");
         jButton4.setBorder(null);
@@ -1033,7 +1471,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
 
-        jButton5.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton5.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jButton5.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/beneficio-financiero.png"))); // NOI18N
         jButton5.setText("HISTORIAL VENTA");
         jButton5.setBorder(null);
@@ -1043,7 +1481,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
 
-        jButton6.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton6.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jButton6.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/nueva-cuenta.png"))); // NOI18N
         jButton6.setText("CLIENTE");
         jButton6.setBorder(null);
@@ -1055,11 +1493,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel32.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/Tecnimotos.png"))); // NOI18N
 
-        jLabel34.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        jLabel34.setText("v1.0");
-
-        jLabel35.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        jLabel35.setText("Desarrollado Por Juan Olave");
+        jButton7.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        jButton7.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/historial-de-compras.png"))); // NOI18N
+        jButton7.setText("HISTORIAL COMPRA");
+        jButton7.setBorder(null);
+        jButton7.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton7ActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout jPanel4Layout = new javax.swing.GroupLayout(jPanel4);
         jPanel4.setLayout(jPanel4Layout);
@@ -1067,23 +1509,16 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addComponent(jLabel32, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
             .addGroup(jPanel4Layout.createSequentialGroup()
+                .addGap(19, 19, 19)
                 .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(jPanel4Layout.createSequentialGroup()
-                        .addGap(19, 19, 19)
-                        .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 162, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                                .addComponent(jButton3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                .addComponent(jButton2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                .addComponent(jButton4, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                .addComponent(jButton6, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                                .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 162, javax.swing.GroupLayout.PREFERRED_SIZE))))
-                    .addGroup(jPanel4Layout.createSequentialGroup()
-                        .addContainerGap()
-                        .addComponent(jLabel34))
-                    .addGroup(jPanel4Layout.createSequentialGroup()
-                        .addContainerGap()
-                        .addComponent(jLabel35)))
+                    .addComponent(jButton7, javax.swing.GroupLayout.PREFERRED_SIZE, 162, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 162, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                        .addComponent(jButton3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(jButton2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(jButton4, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(jButton6, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 162, javax.swing.GroupLayout.PREFERRED_SIZE)))
                 .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
         jPanel4Layout.setVerticalGroup(
@@ -1103,38 +1538,64 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 .addComponent(jButton6, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(18, 18, 18)
                 .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 121, Short.MAX_VALUE)
-                .addComponent(jLabel34)
-                .addGap(4, 4, 4)
-                .addComponent(jLabel35)
-                .addContainerGap())
+                .addGap(18, 18, 18)
+                .addComponent(jButton7, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(93, Short.MAX_VALUE))
         );
 
         jPanel1.add(jPanel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 200, 750));
 
         jPanel11.setBackground(new java.awt.Color(255, 255, 255));
 
-        jLabel2.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
-        jLabel2.setText("SISTEMA DE FACTURACION E INVENTARIO TECNIMOTOSJM");
+        jLabel34.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
+        jLabel34.setText("SISTEMA DE FACTURACION E INVENTARIO TECNIMOTOSJM");
+
+        jLabel2.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
+        jLabel2.setText("ROL: ");
+
+        txtRol.setFont(new java.awt.Font("Roboto", 1, 18)); // NOI18N
+        txtRol.setBorder(null);
+
+        btnSalir.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/cerrar-sesion.png"))); // NOI18N
+        btnSalir.setBorder(null);
+        btnSalir.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnSalirActionPerformed(evt);
+            }
+        });
 
         javax.swing.GroupLayout jPanel11Layout = new javax.swing.GroupLayout(jPanel11);
         jPanel11.setLayout(jPanel11Layout);
         jPanel11Layout.setHorizontalGroup(
             jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel11Layout.createSequentialGroup()
-                .addGap(155, 155, 155)
-                .addComponent(jLabel2)
-                .addContainerGap(155, Short.MAX_VALUE))
+                .addGap(183, 183, 183)
+                .addGroup(jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(jPanel11Layout.createSequentialGroup()
+                        .addComponent(jLabel2)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(txtRol, javax.swing.GroupLayout.PREFERRED_SIZE, 250, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jLabel34))
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 171, Short.MAX_VALUE)
+                .addComponent(btnSalir)
+                .addContainerGap())
         );
         jPanel11Layout.setVerticalGroup(
             jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel11Layout.createSequentialGroup()
-                .addContainerGap(56, Short.MAX_VALUE)
-                .addComponent(jLabel2)
-                .addGap(25, 25, 25))
+                .addContainerGap(34, Short.MAX_VALUE)
+                .addGroup(jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                    .addComponent(btnSalir, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(jPanel11Layout.createSequentialGroup()
+                        .addComponent(jLabel34)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addGroup(jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                            .addComponent(txtRol, javax.swing.GroupLayout.PREFERRED_SIZE, 29, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(jLabel2))))
+                .addGap(12, 12, 12))
         );
 
-        jPanel1.add(jPanel11, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, -30, 980, 110));
+        jPanel1.add(jPanel11, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, -30, 1080, 110));
 
         jPanel10.setBackground(new java.awt.Color(50, 101, 255));
         jPanel10.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
@@ -1142,73 +1603,81 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel4.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
         jLabel4.setForeground(new java.awt.Color(255, 255, 255));
         jLabel4.setText("REPORTE DE CAJA");
-        jPanel10.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 30, 310, -1));
+        jPanel10.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(370, 30, 310, -1));
 
         jLabel5.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel5.setForeground(new java.awt.Color(255, 51, 51));
         jLabel5.setText("TOTAL");
-        jPanel10.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 430, -1, -1));
+        jPanel10.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 430, -1, -1));
 
-        txtEfectivo.setEditable(false);
-        txtEfectivo.setBackground(new java.awt.Color(50, 101, 255));
-        txtEfectivo.setBorder(null);
-        jPanel10.add(txtEfectivo, new org.netbeans.lib.awtextra.AbsoluteConstraints(510, 430, 110, 30));
+        txtTotalCaja.setEditable(false);
+        txtTotalCaja.setBackground(new java.awt.Color(50, 101, 255));
+        txtTotalCaja.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
+        txtTotalCaja.setBorder(null);
+        jPanel10.add(txtTotalCaja, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 430, 220, 30));
 
         jLabel6.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel6.setForeground(new java.awt.Color(255, 255, 255));
         jLabel6.setText("EFECTIVO");
-        jPanel10.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 130, -1, -1));
+        jPanel10.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 130, -1, -1));
 
         jLabel7.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel7.setForeground(new java.awt.Color(255, 255, 255));
         jLabel7.setText("TARJETA");
-        jPanel10.add(jLabel7, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 190, -1, -1));
+        jPanel10.add(jLabel7, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 190, -1, -1));
 
         jLabel8.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel8.setForeground(new java.awt.Color(255, 255, 255));
         jLabel8.setText("TRANSFERENCIA");
-        jPanel10.add(jLabel8, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 250, -1, -1));
+        jPanel10.add(jLabel8, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 250, -1, -1));
 
-        txtEfectivo1.setEditable(false);
-        txtEfectivo1.setBackground(new java.awt.Color(50, 101, 255));
-        txtEfectivo1.setBorder(null);
-        jPanel10.add(txtEfectivo1, new org.netbeans.lib.awtextra.AbsoluteConstraints(510, 130, 110, 30));
+        txtEfectivo.setEditable(false);
+        txtEfectivo.setBackground(new java.awt.Color(50, 101, 255));
+        txtEfectivo.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
+        txtEfectivo.setBorder(null);
+        jPanel10.add(txtEfectivo, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 130, 220, 30));
 
-        txtEfectivo2.setEditable(false);
-        txtEfectivo2.setBackground(new java.awt.Color(50, 101, 255));
-        txtEfectivo2.setBorder(null);
-        jPanel10.add(txtEfectivo2, new org.netbeans.lib.awtextra.AbsoluteConstraints(510, 190, 110, 30));
+        txtTarjeta.setEditable(false);
+        txtTarjeta.setBackground(new java.awt.Color(50, 101, 255));
+        txtTarjeta.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
+        txtTarjeta.setBorder(null);
+        jPanel10.add(txtTarjeta, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 190, 220, 30));
 
-        txtEfectivo3.setEditable(false);
-        txtEfectivo3.setBackground(new java.awt.Color(50, 101, 255));
-        txtEfectivo3.setBorder(null);
-        jPanel10.add(txtEfectivo3, new org.netbeans.lib.awtextra.AbsoluteConstraints(510, 250, 110, 30));
+        txtTransferencia.setEditable(false);
+        txtTransferencia.setBackground(new java.awt.Color(50, 101, 255));
+        txtTransferencia.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
+        txtTransferencia.setBorder(null);
+        jPanel10.add(txtTransferencia, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 250, 220, 30));
 
         jLabel9.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel9.setForeground(new java.awt.Color(255, 255, 255));
         jLabel9.setText("CUENTA CORRIENTE");
-        jPanel10.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 310, -1, -1));
+        jPanel10.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 310, -1, -1));
 
-        txtEfectivo4.setEditable(false);
-        txtEfectivo4.setBackground(new java.awt.Color(50, 101, 255));
-        txtEfectivo4.setBorder(null);
-        jPanel10.add(txtEfectivo4, new org.netbeans.lib.awtextra.AbsoluteConstraints(510, 310, 110, 30));
+        txtCuentaCorriente.setEditable(false);
+        txtCuentaCorriente.setBackground(new java.awt.Color(50, 101, 255));
+        txtCuentaCorriente.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
+        txtCuentaCorriente.setBorder(null);
+        jPanel10.add(txtCuentaCorriente, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 310, 220, 30));
 
         jLabel10.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel10.setForeground(new java.awt.Color(51, 255, 51));
         jLabel10.setText("DEVOLUCIONES");
-        jPanel10.add(jLabel10, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 370, -1, -1));
+        jPanel10.add(jLabel10, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 370, -1, -1));
 
-        txtEfectivo5.setEditable(false);
-        txtEfectivo5.setBackground(new java.awt.Color(50, 101, 255));
-        txtEfectivo5.setBorder(null);
-        jPanel10.add(txtEfectivo5, new org.netbeans.lib.awtextra.AbsoluteConstraints(510, 370, 110, 30));
+        txtDevoluciones.setEditable(false);
+        txtDevoluciones.setBackground(new java.awt.Color(50, 101, 255));
+        txtDevoluciones.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
+        txtDevoluciones.setBorder(null);
+        jPanel10.add(txtDevoluciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 370, 220, 30));
 
         javax.swing.GroupLayout ReporteCajaLayout = new javax.swing.GroupLayout(ReporteCaja);
         ReporteCaja.setLayout(ReporteCajaLayout);
         ReporteCajaLayout.setHorizontalGroup(
             ReporteCajaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel10, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(ReporteCajaLayout.createSequentialGroup()
+                .addComponent(jPanel10, javax.swing.GroupLayout.PREFERRED_SIZE, 1078, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(0, 0, Short.MAX_VALUE))
         );
         ReporteCajaLayout.setVerticalGroup(
             ReporteCajaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -1223,7 +1692,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel1.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
         jLabel1.setForeground(new java.awt.Color(255, 255, 255));
         jLabel1.setText("INVENTARIO");
-        jPanel5.add(jLabel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(360, 20, -1, -1));
+        jPanel5.add(jLabel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(440, 20, -1, -1));
 
         jLabel3.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel3.setForeground(new java.awt.Color(255, 255, 255));
@@ -1243,7 +1712,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane1.setViewportView(TablaInventario);
 
-        jPanel5.add(jScrollPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 160, 940, 420));
+        jPanel5.add(jScrollPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 160, 1040, 420));
 
         txtBuscar.setBorder(null);
         txtBuscar.addActionListener(new java.awt.event.ActionListener() {
@@ -1253,7 +1722,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
         jPanel5.add(txtBuscar, new org.netbeans.lib.awtextra.AbsoluteConstraints(90, 100, 310, 30));
 
-        txtExportar.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        txtExportar.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        txtExportar.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/sobresalir.png"))); // NOI18N
         txtExportar.setText("EXPORTAR");
         txtExportar.setBorder(null);
         txtExportar.addActionListener(new java.awt.event.ActionListener() {
@@ -1263,7 +1733,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
         jPanel5.add(txtExportar, new org.netbeans.lib.awtextra.AbsoluteConstraints(690, 90, 110, 40));
 
-        jButton9.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        jButton9.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        jButton9.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/agregar-producto-inventario.png"))); // NOI18N
         jButton9.setText("AGREGAR");
         jButton9.setBorder(null);
         jButton9.addActionListener(new java.awt.event.ActionListener() {
@@ -1273,10 +1744,16 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
         jPanel5.add(jButton9, new org.netbeans.lib.awtextra.AbsoluteConstraints(560, 90, 110, 40));
 
-        jButton12.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        jButton12.setText("ELIMINAR");
-        jButton12.setBorder(null);
-        jPanel5.add(jButton12, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 90, 110, 40));
+        btnStock.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnStock.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/agotado.png"))); // NOI18N
+        btnStock.setText("STOCK");
+        btnStock.setBorder(null);
+        btnStock.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnStockActionPerformed(evt);
+            }
+        });
+        jPanel5.add(btnStock, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 90, 110, 40));
 
         jLabel36.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel36.setForeground(new java.awt.Color(255, 255, 255));
@@ -1285,7 +1762,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         txtIngresoTotal.setEditable(false);
         txtIngresoTotal.setBackground(new java.awt.Color(50, 101, 255));
-        txtIngresoTotal.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        txtIngresoTotal.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
         txtIngresoTotal.setForeground(new java.awt.Color(255, 255, 0));
         txtIngresoTotal.setBorder(null);
         txtIngresoTotal.addActionListener(new java.awt.event.ActionListener() {
@@ -1295,15 +1772,26 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
         jPanel5.add(txtIngresoTotal, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 600, 310, 30));
 
+        btnActualizarInventario.setBackground(new java.awt.Color(50, 101, 255));
+        btnActualizarInventario.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnActualizarInventario.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/actualizar.png"))); // NOI18N
+        btnActualizarInventario.setBorder(null);
+        btnActualizarInventario.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnActualizarInventarioActionPerformed(evt);
+            }
+        });
+        jPanel5.add(btnActualizarInventario, new org.netbeans.lib.awtextra.AbsoluteConstraints(1020, 90, 40, 40));
+
         javax.swing.GroupLayout InventarioLayout = new javax.swing.GroupLayout(Inventario);
         Inventario.setLayout(InventarioLayout);
         InventarioLayout.setHorizontalGroup(
             InventarioLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 980, Short.MAX_VALUE)
+            .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 1080, Short.MAX_VALUE)
         );
         InventarioLayout.setVerticalGroup(
             InventarioLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE)
+            .addComponent(jPanel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
         );
 
         jTabbedPane1.addTab("IT", Inventario);
@@ -1366,15 +1854,16 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel30.setText("STOCK");
         jPanel16.add(jLabel30, new org.netbeans.lib.awtextra.AbsoluteConstraints(580, 10, -1, -1));
 
-        jButton10.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        jButton10.setText("Agregar");
+        jButton10.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        jButton10.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/anadir-al-carrito-venta.png"))); // NOI18N
+        jButton10.setText("AGREGAR");
         jButton10.setBorder(null);
         jButton10.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jButton10ActionPerformed(evt);
             }
         });
-        jPanel16.add(jButton10, new org.netbeans.lib.awtextra.AbsoluteConstraints(720, 110, 90, 40));
+        jPanel16.add(jButton10, new org.netbeans.lib.awtextra.AbsoluteConstraints(740, 110, 110, 50));
 
         txtPrecioP.setEditable(false);
         txtPrecioP.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
@@ -1390,10 +1879,16 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel13.setText("REF/CODIGO");
         jPanel16.add(jLabel13, new org.netbeans.lib.awtextra.AbsoluteConstraints(190, 10, -1, -1));
 
-        jButton11.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        jButton11.setText("Eliminar");
+        jButton11.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        jButton11.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/quitar-del-carrito.png"))); // NOI18N
+        jButton11.setText("QUITAR");
         jButton11.setBorder(null);
-        jPanel16.add(jButton11, new org.netbeans.lib.awtextra.AbsoluteConstraints(610, 110, 90, 40));
+        jButton11.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton11ActionPerformed(evt);
+            }
+        });
+        jPanel16.add(jButton11, new org.netbeans.lib.awtextra.AbsoluteConstraints(610, 110, 110, 50));
 
         txtCantidad.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtCantidad.setBorder(null);
@@ -1418,7 +1913,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel14.setText("DESCRIPCION");
         jPanel16.add(jLabel14, new org.netbeans.lib.awtextra.AbsoluteConstraints(120, 90, -1, -1));
 
-        jPanel12.add(jPanel16, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 70, 950, 170));
+        jPanel12.add(jPanel16, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 70, 940, 170));
 
         jLabel11.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel11.setForeground(new java.awt.Color(255, 255, 0));
@@ -1443,7 +1938,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane2.setViewportView(TablaVenta);
 
-        jPanel12.add(jScrollPane2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 250, 950, 300));
+        jPanel12.add(jScrollPane2, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 250, 1030, 300));
 
         txtTotalV.setEditable(false);
         txtTotalV.setBackground(new java.awt.Color(50, 101, 255));
@@ -1462,7 +1957,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
         jPanel12.add(txtTotalV, new org.netbeans.lib.awtextra.AbsoluteConstraints(110, 580, 260, 30));
 
-        btnRegistrar.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
+        btnRegistrar.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnRegistrar.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/comprando.png"))); // NOI18N
         btnRegistrar.setText("CONFIRMAR");
         btnRegistrar.setBorder(null);
         btnRegistrar.addActionListener(new java.awt.event.ActionListener() {
@@ -1470,7 +1966,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 btnRegistrarActionPerformed(evt);
             }
         });
-        jPanel12.add(btnRegistrar, new org.netbeans.lib.awtextra.AbsoluteConstraints(810, 570, 90, 40));
+        jPanel12.add(btnRegistrar, new org.netbeans.lib.awtextra.AbsoluteConstraints(930, 560, 120, 50));
 
         jLabel24.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel24.setForeground(new java.awt.Color(255, 255, 255));
@@ -1490,9 +1986,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         Venta.setLayout(VentaLayout);
         VentaLayout.setHorizontalGroup(
             VentaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, VentaLayout.createSequentialGroup()
-                .addComponent(jPanel12, javax.swing.GroupLayout.PREFERRED_SIZE, 981, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(0, 0, Short.MAX_VALUE))
+            .addComponent(jPanel12, javax.swing.GroupLayout.DEFAULT_SIZE, 1080, Short.MAX_VALUE)
         );
         VentaLayout.setVerticalGroup(
             VentaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -1510,12 +2004,12 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel17.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
         jLabel17.setForeground(new java.awt.Color(255, 255, 255));
         jLabel17.setText("CLIENTES");
-        jPanel13.add(jLabel17, new org.netbeans.lib.awtextra.AbsoluteConstraints(370, 20, -1, -1));
+        jPanel13.add(jLabel17, new org.netbeans.lib.awtextra.AbsoluteConstraints(440, 20, -1, -1));
 
         jLabel18.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel18.setForeground(new java.awt.Color(255, 255, 255));
         jLabel18.setText("BUSCAR:");
-        jPanel13.add(jLabel18, new org.netbeans.lib.awtextra.AbsoluteConstraints(440, 110, -1, -1));
+        jPanel13.add(jLabel18, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 110, -1, -1));
 
         TablaCliente.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
@@ -1530,20 +2024,25 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane3.setViewportView(TablaCliente);
 
-        jPanel13.add(jScrollPane3, new org.netbeans.lib.awtextra.AbsoluteConstraints(440, 150, 520, -1));
+        jPanel13.add(jScrollPane3, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 150, 600, -1));
 
-        txtBuscarCliente.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        txtBuscarCliente.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
         txtBuscarCliente.setBorder(null);
-        jPanel13.add(txtBuscarCliente, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 110, 340, 30));
+        txtBuscarCliente.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyReleased(java.awt.event.KeyEvent evt) {
+                txtBuscarClienteKeyReleased(evt);
+            }
+        });
+        jPanel13.add(txtBuscarCliente, new org.netbeans.lib.awtextra.AbsoluteConstraints(540, 110, 340, 30));
 
         txtNombre.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtNombre.setBorder(null);
-        jPanel13.add(txtNombre, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 190, 250, 20));
+        jPanel13.add(txtNombre, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 220, 250, 20));
 
         jLabel19.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel19.setForeground(new java.awt.Color(255, 255, 255));
         jLabel19.setText("NOMBRES*");
-        jPanel13.add(jLabel19, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 150, -1, -1));
+        jPanel13.add(jLabel19, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 180, -1, -1));
 
         txtTelefono.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtTelefono.setBorder(null);
@@ -1552,35 +2051,35 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 txtTelefonoKeyTyped(evt);
             }
         });
-        jPanel13.add(txtTelefono, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 360, 250, 20));
+        jPanel13.add(txtTelefono, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 390, 250, 20));
 
         jLabel20.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel20.setForeground(new java.awt.Color(255, 255, 255));
         jLabel20.setText("TELEFONO*");
-        jPanel13.add(jLabel20, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 320, -1, -1));
+        jPanel13.add(jLabel20, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 350, -1, -1));
 
         txtApellido.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtApellido.setBorder(null);
-        jPanel13.add(txtApellido, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 280, 250, 20));
+        jPanel13.add(txtApellido, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 310, 250, 20));
 
         jLabel21.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel21.setForeground(new java.awt.Color(255, 255, 255));
         jLabel21.setText("APELLIDOS*");
-        jPanel13.add(jLabel21, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 240, -1, -1));
+        jPanel13.add(jLabel21, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 270, -1, -1));
 
         txtDireccion.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtDireccion.setBorder(null);
-        jPanel13.add(txtDireccion, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 440, 250, 20));
+        jPanel13.add(txtDireccion, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 470, 250, 20));
 
         jLabel22.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel22.setForeground(new java.awt.Color(255, 255, 255));
         jLabel22.setText("DIRECCION");
-        jPanel13.add(jLabel22, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 400, -1, -1));
+        jPanel13.add(jLabel22, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 430, -1, -1));
 
         jLabel23.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel23.setForeground(new java.awt.Color(255, 255, 255));
         jLabel23.setText("NIT/CEDULA");
-        jPanel13.add(jLabel23, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 70, -1, -1));
+        jPanel13.add(jLabel23, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 100, -1, -1));
 
         txtCedula.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtCedula.setBorder(null);
@@ -1589,22 +2088,29 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 txtCedulaKeyTyped(evt);
             }
         });
-        jPanel13.add(txtCedula, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 110, 250, 20));
+        jPanel13.add(txtCedula, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 140, 250, 20));
 
-        btnAgregar.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        btnAgregar.setText("ELIMINAR");
-        btnAgregar.setBorder(null);
-        jPanel13.add(btnAgregar, new org.netbeans.lib.awtextra.AbsoluteConstraints(140, 490, 90, 40));
-
-        btnAgregar1.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
-        btnAgregar1.setText("AGREGAR");
-        btnAgregar1.setBorder(null);
-        btnAgregar1.addActionListener(new java.awt.event.ActionListener() {
+        btnEliminarCliente.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnEliminarCliente.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/quitar-usuario.png"))); // NOI18N
+        btnEliminarCliente.setText("ELIMINAR");
+        btnEliminarCliente.setBorder(null);
+        btnEliminarCliente.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                btnAgregar1ActionPerformed(evt);
+                btnEliminarClienteActionPerformed(evt);
             }
         });
-        jPanel13.add(btnAgregar1, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 490, 90, 40));
+        jPanel13.add(btnEliminarCliente, new org.netbeans.lib.awtextra.AbsoluteConstraints(200, 510, 100, 50));
+
+        btnAgregarCliente.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnAgregarCliente.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/agregar-usuario.png"))); // NOI18N
+        btnAgregarCliente.setText("AGREGAR");
+        btnAgregarCliente.setBorder(null);
+        btnAgregarCliente.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnAgregarClienteActionPerformed(evt);
+            }
+        });
+        jPanel13.add(btnAgregarCliente, new org.netbeans.lib.awtextra.AbsoluteConstraints(80, 510, 100, 50));
 
         javax.swing.GroupLayout ClienteLayout = new javax.swing.GroupLayout(Cliente);
         Cliente.setLayout(ClienteLayout);
@@ -1635,7 +2141,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane5.setViewportView(TablaCompra);
 
-        jPanel14.add(jScrollPane5, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 100, -1, 460));
+        jPanel14.add(jScrollPane5, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 100, 550, 460));
 
         jPanel17.setBackground(new java.awt.Color(153, 153, 153));
         jPanel17.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
@@ -1659,7 +2165,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel26.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
         jLabel26.setForeground(new java.awt.Color(255, 255, 255));
         jLabel26.setText("INGRESOS DE MERCANCIA");
-        jPanel14.add(jLabel26, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 30, -1, -1));
+        jPanel14.add(jLabel26, new org.netbeans.lib.awtextra.AbsoluteConstraints(300, 20, -1, -1));
 
         jPanel18.setBackground(new java.awt.Color(153, 153, 153));
         jPanel18.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
@@ -1690,6 +2196,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         txtCantidadCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtCantidadCompra.setBorder(null);
+        txtCantidadCompra.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                txtCantidadCompraKeyTyped(evt);
+            }
+        });
         jPanel18.add(txtCantidadCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 40, 50, 20));
 
         jLabel28.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
@@ -1720,6 +2231,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 txtPrecioCostoCompraActionPerformed(evt);
             }
         });
+        txtPrecioCostoCompra.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                txtPrecioCostoCompraKeyTyped(evt);
+            }
+        });
         jPanel18.add(txtPrecioCostoCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 210, 140, -1));
 
         txtStockCompra.setEditable(false);
@@ -1738,6 +2254,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 txtPrecioVentaCompraActionPerformed(evt);
             }
         });
+        txtPrecioVentaCompra.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyTyped(java.awt.event.KeyEvent evt) {
+                txtPrecioVentaCompraKeyTyped(evt);
+            }
+        });
         jPanel18.add(txtPrecioVentaCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(30, 280, 140, -1));
 
         jLabel40.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
@@ -1753,6 +2274,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jPanel18.add(boxProveedorCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 210, 140, 30));
 
         btnAgregarCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnAgregarCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/agregar-producto.png"))); // NOI18N
         btnAgregarCompra.setText("AGREGAR");
         btnAgregarCompra.setBorder(null);
         btnAgregarCompra.addActionListener(new java.awt.event.ActionListener() {
@@ -1764,7 +2286,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jPanel14.add(jPanel18, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 240, 410, 320));
 
+        btnQuitarCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnQuitarCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/eliminar-producto.png"))); // NOI18N
+        btnQuitarCompra.setText("QUITAR");
+        btnQuitarCompra.setBorder(null);
+        btnQuitarCompra.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnQuitarCompraActionPerformed(evt);
+            }
+        });
+        jPanel14.add(btnQuitarCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 580, 110, 40));
+
         btnFinalizarCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnFinalizarCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/cheque.png"))); // NOI18N
         btnFinalizarCompra.setText("FINALIZAR");
         btnFinalizarCompra.setBorder(null);
         btnFinalizarCompra.addActionListener(new java.awt.event.ActionListener() {
@@ -1772,7 +2306,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 btnFinalizarCompraActionPerformed(evt);
             }
         });
-        jPanel14.add(btnFinalizarCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(840, 580, 110, 40));
+        jPanel14.add(btnFinalizarCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(940, 580, 110, 40));
 
         javax.swing.GroupLayout CompraInventarioLayout = new javax.swing.GroupLayout(CompraInventario);
         CompraInventario.setLayout(CompraInventarioLayout);
@@ -1808,14 +2342,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane4.setViewportView(TablaVentaHistorial);
 
-        jPanel15.add(jScrollPane4, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 940, -1));
+        jPanel15.add(jScrollPane4, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 1040, -1));
 
         jLabel33.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
         jLabel33.setForeground(new java.awt.Color(255, 255, 255));
         jLabel33.setText("HISTORIAL DE VENTAS");
-        jPanel15.add(jLabel33, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 30, -1, -1));
+        jPanel15.add(jLabel33, new org.netbeans.lib.awtextra.AbsoluteConstraints(340, 30, -1, -1));
 
         btnExportarVenta.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnExportarVenta.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/sobresalir.png"))); // NOI18N
         btnExportarVenta.setText("EXPORTAR");
         btnExportarVenta.setBorder(null);
         btnExportarVenta.addActionListener(new java.awt.event.ActionListener() {
@@ -1823,30 +2358,36 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 btnExportarVentaActionPerformed(evt);
             }
         });
-        jPanel15.add(btnExportarVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(850, 130, 110, 40));
+        jPanel15.add(btnExportarVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(950, 130, 110, 40));
 
         txtFechaFin.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtFechaFin.setBorder(null);
-        jPanel15.add(txtFechaFin, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 130, 90, 30));
+        jPanel15.add(txtFechaFin, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 130, 100, 30));
 
         txtFechaInicial.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtFechaInicial.setBorder(null);
-        jPanel15.add(txtFechaInicial, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 90, 30));
+        txtFechaInicial.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                txtFechaInicialActionPerformed(evt);
+            }
+        });
+        jPanel15.add(txtFechaInicial, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 100, 30));
 
         jLabel42.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel42.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel42.setText("DD/MM/AA");
+        jLabel42.setText("DD-MM-AA");
         jPanel15.add(jLabel42, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 100, 100, -1));
 
-        txtBuscarFechaVenta.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
-        txtBuscarFechaVenta.setText("BUSCAR");
-        txtBuscarFechaVenta.setBorder(null);
-        txtBuscarFechaVenta.addActionListener(new java.awt.event.ActionListener() {
+        btnBuscarFechaVenta.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        btnBuscarFechaVenta.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/lupa.png"))); // NOI18N
+        btnBuscarFechaVenta.setText("BUSCAR");
+        btnBuscarFechaVenta.setBorder(null);
+        btnBuscarFechaVenta.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                txtBuscarFechaVentaActionPerformed(evt);
+                btnBuscarFechaVentaActionPerformed(evt);
             }
         });
-        jPanel15.add(txtBuscarFechaVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 130, 100, 30));
+        jPanel15.add(btnBuscarFechaVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 120, 100, 40));
 
         jLabel43.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel43.setForeground(new java.awt.Color(255, 255, 255));
@@ -1855,8 +2396,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel44.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel44.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel44.setText("DD/MM/AA");
-        jPanel15.add(jLabel44, new org.netbeans.lib.awtextra.AbsoluteConstraints(120, 100, 100, -1));
+        jLabel44.setText("DD-MM-AA");
+        jPanel15.add(jLabel44, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 100, 100, -1));
+
+        btnActualizarHistorialVenta.setBackground(new java.awt.Color(50, 101, 255));
+        btnActualizarHistorialVenta.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        btnActualizarHistorialVenta.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/actualizar.png"))); // NOI18N
+        btnActualizarHistorialVenta.setBorder(null);
+        btnActualizarHistorialVenta.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnActualizarHistorialVentaActionPerformed(evt);
+            }
+        });
+        jPanel15.add(btnActualizarHistorialVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(1010, 20, 50, 50));
 
         javax.swing.GroupLayout HistorialVentaLayout = new javax.swing.GroupLayout(HistorialVenta);
         HistorialVenta.setLayout(HistorialVentaLayout);
@@ -1871,15 +2423,115 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jTabbedPane1.addTab("HV", HistorialVenta);
 
-        jPanel1.add(jTabbedPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 40, 980, 680));
+        jPanel2.setBackground(new java.awt.Color(50, 101, 255));
+        jPanel2.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        jLabel35.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
+        jLabel35.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel35.setText("HISTORIAL INGRESO DE MERCANCIA");
+        jPanel2.add(jLabel35, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 20, -1, -1));
+
+        TablaHistorialCompra.setModel(new javax.swing.table.DefaultTableModel(
+            new Object [][] {
+                {null, null, null, null},
+                {null, null, null, null},
+                {null, null, null, null},
+                {null, null, null, null}
+            },
+            new String [] {
+                "Title 1", "Title 2", "Title 3", "Title 4"
+            }
+        ));
+        jScrollPane6.setViewportView(TablaHistorialCompra);
+
+        jPanel2.add(jScrollPane6, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 1040, -1));
+
+        jLabel45.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
+        jLabel45.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel45.setText("FECHA");
+        jPanel2.add(jLabel45, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 130, -1, -1));
+
+        txtFechaInicial2.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        txtFechaInicial2.setBorder(null);
+        txtFechaInicial2.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                txtFechaInicial2ActionPerformed(evt);
+            }
+        });
+        jPanel2.add(txtFechaInicial2, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 100, 30));
+
+        jLabel46.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
+        jLabel46.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel46.setText("DD-MM-AA");
+        jPanel2.add(jLabel46, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 100, 100, -1));
+
+        jLabel47.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
+        jLabel47.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel47.setText("A");
+        jPanel2.add(jLabel47, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 130, -1, -1));
+
+        txtFechaFin2.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        txtFechaFin2.setBorder(null);
+        jPanel2.add(txtFechaFin2, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 130, 100, 30));
+
+        jLabel48.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
+        jLabel48.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel48.setText("DD-MM-AA");
+        jPanel2.add(jLabel48, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 100, 100, -1));
+
+        btnBuscarFechaCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        btnBuscarFechaCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/lupa.png"))); // NOI18N
+        btnBuscarFechaCompra.setText("BUSCAR");
+        btnBuscarFechaCompra.setBorder(null);
+        btnBuscarFechaCompra.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnBuscarFechaCompraActionPerformed(evt);
+            }
+        });
+        jPanel2.add(btnBuscarFechaCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 120, 100, 40));
+
+        btnExportarCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        btnExportarCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/sobresalir.png"))); // NOI18N
+        btnExportarCompra.setText("EXPORTAR");
+        btnExportarCompra.setBorder(null);
+        btnExportarCompra.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnExportarCompraActionPerformed(evt);
+            }
+        });
+        jPanel2.add(btnExportarCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(950, 130, 110, 40));
+
+        btnActualizarHistorialCompra.setBackground(new java.awt.Color(50, 101, 255));
+        btnActualizarHistorialCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
+        btnActualizarHistorialCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/actualizar.png"))); // NOI18N
+        btnActualizarHistorialCompra.setBorder(null);
+        btnActualizarHistorialCompra.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                btnActualizarHistorialCompraActionPerformed(evt);
+            }
+        });
+        jPanel2.add(btnActualizarHistorialCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(1010, 20, 50, 50));
+
+        javax.swing.GroupLayout HistorialCompraLayout = new javax.swing.GroupLayout(HistorialCompra);
+        HistorialCompra.setLayout(HistorialCompraLayout);
+        HistorialCompraLayout.setHorizontalGroup(
+            HistorialCompraLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+        );
+        HistorialCompraLayout.setVerticalGroup(
+            HistorialCompraLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addComponent(jPanel2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE)
+        );
+
+        jTabbedPane1.addTab("tab7", HistorialCompra);
+
+        jPanel1.add(jTabbedPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 40, 1080, 680));
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(layout.createSequentialGroup()
-                .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, 1200, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(0, 0, Short.MAX_VALUE))
+            .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 1300, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -1911,11 +2563,13 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
     private void jButton5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton5ActionPerformed
         jTabbedPane1.setSelectedIndex(5);
+        historialVenta();
     }//GEN-LAST:event_jButton5ActionPerformed
 
     private void jButton6ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton6ActionPerformed
         jTabbedPane1.setSelectedIndex(3);
         configurarTablaCliente();
+        CargarClientes();
     }//GEN-LAST:event_jButton6ActionPerformed
 
     private void jButton9ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton9ActionPerformed
@@ -2017,9 +2671,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         // TODO add your handling code here:
     }//GEN-LAST:event_txtDescripcionCompraActionPerformed
 
-    private void btnAgregar1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnAgregar1ActionPerformed
+    private void btnAgregarClienteActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnAgregarClienteActionPerformed
         AgregarCliente();
-    }//GEN-LAST:event_btnAgregar1ActionPerformed
+    }//GEN-LAST:event_btnAgregarClienteActionPerformed
 
     private void txtPrecioCostoCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtPrecioCostoCompraActionPerformed
         // TODO add your handling code here:
@@ -2030,153 +2684,29 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }//GEN-LAST:event_txtPrecioVentaCompraActionPerformed
 
     private void btnAgregarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnAgregarCompraActionPerformed
+        DefaultTableModel model = (DefaultTableModel) TablaCompra.getModel();
+
         String codigo = txtRefCodigoCompra.getText().trim();
         String descripcion = txtDescripcionCompra.getText().trim();
-        String precioVenta = txtPrecioVentaCompra.getText().trim();
+        String cantidad = txtCantidadCompra.getText().trim();
         String precioCosto = txtPrecioCostoCompra.getText().trim();
-        String nombreProveedor = boxProveedorCompra.getSelectedItem().toString().trim();
-        String cantidadStr = txtCantidadCompra.getText().trim();
+        String precioVenta = txtPrecioVentaCompra.getText().trim();
+        String stock = txtStockCompra.getText().trim();
+        String proveedor = (String) boxProveedorCompra.getSelectedItem();
 
-        if (codigo.isEmpty() || descripcion.isEmpty() || precioVenta.isEmpty() || precioCosto.isEmpty() || cantidadStr.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "Completa todos los campos antes de agregar el producto.", "Error", JOptionPane.ERROR_MESSAGE);
+        if (codigo.isEmpty() || descripcion.isEmpty() || cantidad.isEmpty() || precioCosto.isEmpty() || precioVenta.isEmpty() || proveedor.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "Todos los campos son obligatorios.");
             return;
         }
 
-        try {
-            int cantidad = Integer.parseInt(cantidadStr);
-            if (cantidad <= 0) {
-                JOptionPane.showMessageDialog(null, "La cantidad debe ser mayor a 0.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            // 🔹 Agregar el producto solo a la tabla visual, no a la base de datos
-            DefaultTableModel model = (DefaultTableModel) TablaCompra.getModel();
-            model.addRow(new Object[]{codigo, descripcion, cantidad, precioCosto, precioVenta, cantidad});
-
-            JOptionPane.showMessageDialog(null, "Producto agregado a la lista. Finaliza la compra para registrarlo.", "Información", JOptionPane.INFORMATION_MESSAGE);
-
-            // Limpiar campos después de agregar
-            limpiarCampos();
-            bloquearCampos();
-
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(null, "Error: La cantidad debe ser un número válido.", "Error", JOptionPane.ERROR_MESSAGE);
-        }
+        model.addRow(new Object[]{codigo, descripcion, cantidad, precioCosto, precioVenta, stock, proveedor});
+        limpiarCampos();
+        bloquearCampos();
     }//GEN-LAST:event_btnAgregarCompraActionPerformed
 
-    private void btnFinalizarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnFinalizarCompraActionPerformed
-        DefaultTableModel modelo = (DefaultTableModel) TablaCompra.getModel();
-        if (modelo.getRowCount() == 0) {
-            JOptionPane.showMessageDialog(null, "No hay productos en la lista. Agregue al menos uno antes de finalizar.", "Error", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        try {
-            String proveedor = boxProveedorCompra.getSelectedItem().toString().trim();
-            String fechaActual = new SimpleDateFormat("yyyy-MM-dd").format(new Date());
-
-            conexion.setAutoCommit(false); // 🔹 INICIO TRANSACCIÓN
-
-            // 🔹 1. OBTENER O REGISTRAR EL PROVEEDOR
-            String sqlProveedor = "SELECT ID FROM Proveedor WHERE Proveedor = ?";
-            PreparedStatement pstProveedor = conexion.prepareStatement(sqlProveedor);
-            pstProveedor.setString(1, proveedor);
-            ResultSet rsProveedor = pstProveedor.executeQuery();
-
-            int idProveedor;
-            if (rsProveedor.next()) {
-                idProveedor = rsProveedor.getInt("ID");
-            } else {
-                String sqlInsertProveedor = "INSERT INTO Proveedor (Proveedor) VALUES (?)";
-                PreparedStatement pstInsertProveedor = conexion.prepareStatement(sqlInsertProveedor, Statement.RETURN_GENERATED_KEYS);
-                pstInsertProveedor.setString(1, proveedor);
-                pstInsertProveedor.executeUpdate();
-
-                ResultSet rsNuevoProveedor = pstInsertProveedor.getGeneratedKeys();
-                if (!rsNuevoProveedor.next()) {
-                    throw new SQLException("No se pudo registrar el nuevo proveedor.");
-                }
-                idProveedor = rsNuevoProveedor.getInt(1);
-            }
-
-            // 🔹 2. INSERTAR COMPRA
-            String sqlCompra = "INSERT INTO Compra (ID_Proveedor, Fecha) VALUES (?, ?)";
-            PreparedStatement pstCompra = conexion.prepareStatement(sqlCompra, Statement.RETURN_GENERATED_KEYS);
-            pstCompra.setInt(1, idProveedor);
-            pstCompra.setString(2, fechaActual);
-            pstCompra.executeUpdate();
-
-            ResultSet rsCompra = pstCompra.getGeneratedKeys();
-            if (!rsCompra.next()) {
-                throw new SQLException("No se pudo obtener el ID de la compra.");
-            }
-            int idCompra = rsCompra.getInt(1);
-
-            // 🔹 3. INSERTAR PRODUCTOS EN `Detalle_Compra` Y ACTUALIZAR STOCK
-            for (int i = 0; i < modelo.getRowCount(); i++) {
-                String codigo = modelo.getValueAt(i, 0).toString();
-                int cantidad = Integer.parseInt(modelo.getValueAt(i, 2).toString());
-                double precioCosto = Double.parseDouble(modelo.getValueAt(i, 3).toString());
-
-                // 🔹 INSERTAR PRODUCTO SI NO EXISTE
-                String sqlProducto = "SELECT Codigo FROM Producto WHERE Codigo = ?";
-                PreparedStatement pstProducto = conexion.prepareStatement(sqlProducto);
-                pstProducto.setString(1, codigo);
-                ResultSet rsProducto = pstProducto.executeQuery();
-
-                if (!rsProducto.next()) {
-                    // Si el producto no existe, lo insertamos
-                    String descripcion = modelo.getValueAt(i, 1).toString();
-                    double precioVenta = Double.parseDouble(modelo.getValueAt(i, 4).toString());
-
-                    String sqlInsertProducto = "INSERT INTO Producto (Codigo, Descripcion, ID_Proveedor, Precio, Precio_Costo, Stock) VALUES (?, ?, ?, ?, ?, ?)";
-                    PreparedStatement pstInsertProducto = conexion.prepareStatement(sqlInsertProducto);
-                    pstInsertProducto.setString(1, codigo);
-                    pstInsertProducto.setString(2, descripcion);
-                    pstInsertProducto.setInt(3, idProveedor);
-                    pstInsertProducto.setDouble(4, precioVenta);
-                    pstInsertProducto.setDouble(5, precioCosto);
-                    pstInsertProducto.setInt(6, cantidad);
-                    pstInsertProducto.executeUpdate();
-                }
-
-                // 🔹 INSERTAR EN DETALLE_COMPRA
-                String sqlDetalle = "INSERT INTO Detalle_Compra (ID_Compra, ID_Producto, Cantidad, Precio_Costo) VALUES (?, ?, ?, ?)";
-                PreparedStatement pstDetalle = conexion.prepareStatement(sqlDetalle);
-                pstDetalle.setInt(1, idCompra);
-                pstDetalle.setString(2, codigo); // Usamos el código como ID_Producto
-                pstDetalle.setInt(3, cantidad);
-                pstDetalle.setDouble(4, precioCosto);
-                pstDetalle.executeUpdate();
-
-                // 🔹 ACTUALIZAR STOCK
-                String sqlUpdateStock = "UPDATE Producto SET Stock = Stock + ? WHERE Codigo = ?";
-                PreparedStatement pstUpdateStock = conexion.prepareStatement(sqlUpdateStock);
-                pstUpdateStock.setInt(1, cantidad);
-                pstUpdateStock.setString(2, codigo);
-                pstUpdateStock.executeUpdate();
-            }
-
-            conexion.commit();
-            JOptionPane.showMessageDialog(null, "Compra registrada con éxito.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
-            modelo.setRowCount(0); // Limpiar la tabla en la interfaz
-            obtenerUltimaFactura();
-
-        } catch (SQLException e) {
-            try {
-                conexion.rollback();
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
-            JOptionPane.showMessageDialog(null, "Error al registrar la compra: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-        } finally {
-            try {
-                conexion.setAutoCommit(true);
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
-        }
-    }//GEN-LAST:event_btnFinalizarCompraActionPerformed
+    private void btnQuitarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnQuitarCompraActionPerformed
+        QuitarProductoCompra();
+    }//GEN-LAST:event_btnQuitarCompraActionPerformed
 
     private void txtRefCodigoCompraKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtRefCodigoCompraKeyReleased
         SwingUtilities.invokeLater(() -> {
@@ -2205,13 +2735,183 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         exportarHistorialVenta();
     }//GEN-LAST:event_btnExportarVentaActionPerformed
 
-    private void txtBuscarFechaVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtBuscarFechaVentaActionPerformed
+    private void btnBuscarFechaVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBuscarFechaVentaActionPerformed
         buscarPorFecha();
-    }//GEN-LAST:event_txtBuscarFechaVentaActionPerformed
+    }//GEN-LAST:event_btnBuscarFechaVentaActionPerformed
 
     private void txtNFacturaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtNFacturaActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_txtNFacturaActionPerformed
+
+    private void btnFinalizarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnFinalizarCompraActionPerformed
+        try {
+            conexion.setAutoCommit(false);
+
+            DefaultTableModel model = (DefaultTableModel) TablaCompra.getModel();
+            if (model.getRowCount() == 0) {
+                JOptionPane.showMessageDialog(null, "No hay productos en la compra.");
+                return;
+            }
+
+            String nombreProveedor = model.getValueAt(0, 6).toString();
+            int idProveedor = obtenerIdProveedor(nombreProveedor);
+
+            // Insertar Compra
+            String insertCompra = "INSERT INTO Compra (ID_Proveedor, Fecha) VALUES (?, NOW())";
+            ps = conexion.prepareStatement(insertCompra, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, idProveedor);
+            ps.executeUpdate();
+
+            res = ps.getGeneratedKeys();
+            int idCompra = res.next() ? res.getInt(1) : 0;
+
+            for (int i = 0; i < model.getRowCount(); i++) {
+                String codigo = model.getValueAt(i, 0).toString();
+                String descripcion = model.getValueAt(i, 1).toString();
+                int cantidad = Integer.parseInt(model.getValueAt(i, 2).toString());
+                double precioCosto = Double.parseDouble(model.getValueAt(i, 3).toString());
+                double precioVenta = Double.parseDouble(model.getValueAt(i, 4).toString());
+
+                // Verificar si el producto existe en la tabla Producto
+                String verificarProducto = "SELECT COUNT(*) FROM Producto WHERE Codigo = ?";
+                ps = conexion.prepareStatement(verificarProducto);
+                ps.setString(1, codigo);
+                res = ps.executeQuery();
+                res.next();
+                int existe = res.getInt(1);
+
+                // Si no existe, insertar el producto
+                if (existe == 0) {
+                    String insertProducto = "INSERT INTO Producto (Codigo, Descripcion, Precio_Costo, Precio, Stock, ID_Proveedor) VALUES (?, ?, ?, ?, ?, ?)";
+                    ps = conexion.prepareStatement(insertProducto);
+                    ps.setString(1, codigo);
+                    ps.setString(2, descripcion);
+                    ps.setDouble(3, precioCosto);
+                    ps.setDouble(4, precioVenta);
+                    ps.setInt(5, cantidad);
+                    ps.setInt(6, idProveedor);
+                    ps.executeUpdate();
+                }
+
+                // Insertar Detalle_Compra
+                String insertDetalle = "INSERT INTO Detalle_Compra (ID_Compra, ID_Producto, Cantidad, Precio_Costo) VALUES (?, ?, ?, ?)";
+                ps = conexion.prepareStatement(insertDetalle);
+                ps.setInt(1, idCompra);
+                ps.setString(2, codigo);
+                ps.setInt(3, cantidad);
+                ps.setDouble(4, precioCosto);
+                ps.executeUpdate();
+
+                // Actualizar Stock
+                String updateStock = "UPDATE Producto SET Stock = Stock + ? WHERE Codigo = ?";
+                ps = conexion.prepareStatement(updateStock);
+                ps.setInt(1, cantidad);
+                ps.setString(2, codigo);
+                ps.executeUpdate();
+            }
+
+            conexion.commit();
+            JOptionPane.showMessageDialog(null, "Compra registrada exitosamente.");
+            configurarTablaCompra();
+            obtenerUltimaFactura();
+        } catch (SQLException e) {
+            try {
+                conexion.rollback();
+            } catch (SQLException ex) {
+            }
+            JOptionPane.showMessageDialog(null, "Error al finalizar compra: " + e.getMessage());
+        } finally {
+            try {
+                conexion.setAutoCommit(true);
+            } catch (SQLException e) {
+            }
+        }
+    }//GEN-LAST:event_btnFinalizarCompraActionPerformed
+
+    private void jButton11ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton11ActionPerformed
+        QuitarProductoVenta();
+    }//GEN-LAST:event_jButton11ActionPerformed
+
+    private void txtFechaInicialActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtFechaInicialActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_txtFechaInicialActionPerformed
+
+    private void btnActualizarHistorialVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarHistorialVentaActionPerformed
+        txtFechaInicial.setText("");
+        txtFechaFin.setText("");
+        historialVenta();
+    }//GEN-LAST:event_btnActualizarHistorialVentaActionPerformed
+
+    private void btnActualizarInventarioActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarInventarioActionPerformed
+        CargarInventario();
+    }//GEN-LAST:event_btnActualizarInventarioActionPerformed
+
+    private void btnSalirActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSalirActionPerformed
+        Interfaz_Login login = new Interfaz_Login();
+        login.setVisible(true);
+        login.setLocationRelativeTo(null);
+        this.dispose();
+    }//GEN-LAST:event_btnSalirActionPerformed
+
+    private void txtCantidadCompraKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtCantidadCompraKeyTyped
+        char c = evt.getKeyChar();
+
+        // Verificar si el carácter no es un número ni la tecla de retroceso
+        if (!Character.isDigit(c) && c != KeyEvent.VK_BACK_SPACE) {
+            evt.consume(); // Bloquea la tecla si no es un número
+        }
+    }//GEN-LAST:event_txtCantidadCompraKeyTyped
+
+    private void txtPrecioCostoCompraKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPrecioCostoCompraKeyTyped
+        char c = evt.getKeyChar();
+
+        // Verificar si el carácter no es un número ni la tecla de retroceso
+        if (!Character.isDigit(c) && c != KeyEvent.VK_BACK_SPACE) {
+            evt.consume(); // Bloquea la tecla si no es un número
+        }
+    }//GEN-LAST:event_txtPrecioCostoCompraKeyTyped
+
+    private void txtPrecioVentaCompraKeyTyped(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtPrecioVentaCompraKeyTyped
+        char c = evt.getKeyChar();
+
+        // Verificar si el carácter no es un número ni la tecla de retroceso
+        if (!Character.isDigit(c) && c != KeyEvent.VK_BACK_SPACE) {
+            evt.consume(); // Bloquea la tecla si no es un número
+        }
+    }//GEN-LAST:event_txtPrecioVentaCompraKeyTyped
+
+    private void btnStockActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnStockActionPerformed
+        filtrarStockBajo();
+    }//GEN-LAST:event_btnStockActionPerformed
+
+    private void txtBuscarClienteKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtBuscarClienteKeyReleased
+        BuscarCliente();
+    }//GEN-LAST:event_txtBuscarClienteKeyReleased
+
+    private void btnEliminarClienteActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEliminarClienteActionPerformed
+        EliminarCliente();
+    }//GEN-LAST:event_btnEliminarClienteActionPerformed
+
+    private void jButton7ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton7ActionPerformed
+        jTabbedPane1.setSelectedIndex(6);
+        historialCompra();
+    }//GEN-LAST:event_jButton7ActionPerformed
+
+    private void txtFechaInicial2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtFechaInicial2ActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_txtFechaInicial2ActionPerformed
+
+    private void btnBuscarFechaCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBuscarFechaCompraActionPerformed
+        buscarCompraPorFecha();
+    }//GEN-LAST:event_btnBuscarFechaCompraActionPerformed
+
+    private void btnExportarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarCompraActionPerformed
+        exportarHistorialCompra();
+    }//GEN-LAST:event_btnExportarCompraActionPerformed
+
+    private void btnActualizarHistorialCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarHistorialCompraActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_btnActualizarHistorialCompraActionPerformed
 
     /**
      * @param args the command line arguments
@@ -2251,32 +2951,43 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JPanel Cliente;
     private javax.swing.JPanel CompraInventario;
+    private javax.swing.JPanel HistorialCompra;
     private javax.swing.JPanel HistorialVenta;
     private javax.swing.JPanel Inventario;
     private javax.swing.JPanel ReporteCaja;
     private javax.swing.JTable TablaCliente;
     private javax.swing.JTable TablaCompra;
+    private javax.swing.JTable TablaHistorialCompra;
     private javax.swing.JTable TablaInventario;
     public javax.swing.JTable TablaVenta;
     private javax.swing.JTable TablaVentaHistorial;
     private javax.swing.JPanel Venta;
     public javax.swing.JComboBox<String> boxCliente;
     private javax.swing.JComboBox<String> boxProveedorCompra;
-    private javax.swing.JButton btnAgregar;
-    private javax.swing.JButton btnAgregar1;
+    private javax.swing.JButton btnActualizarHistorialCompra;
+    private javax.swing.JButton btnActualizarHistorialVenta;
+    private javax.swing.JButton btnActualizarInventario;
+    private javax.swing.JButton btnAgregarCliente;
     private javax.swing.JButton btnAgregarCompra;
+    private javax.swing.JButton btnBuscarFechaCompra;
+    private javax.swing.JButton btnBuscarFechaVenta;
+    private javax.swing.JButton btnEliminarCliente;
+    private javax.swing.JButton btnExportarCompra;
     private javax.swing.JButton btnExportarVenta;
     private javax.swing.JButton btnFinalizarCompra;
+    private javax.swing.JButton btnQuitarCompra;
     private javax.swing.JButton btnRegistrar;
+    private javax.swing.JButton btnSalir;
+    private javax.swing.JButton btnStock;
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButton10;
     private javax.swing.JButton jButton11;
-    private javax.swing.JButton jButton12;
     private javax.swing.JButton jButton2;
     private javax.swing.JButton jButton3;
     private javax.swing.JButton jButton4;
     private javax.swing.JButton jButton5;
     private javax.swing.JButton jButton6;
+    private javax.swing.JButton jButton7;
     private javax.swing.JButton jButton9;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel10;
@@ -2317,6 +3028,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel42;
     private javax.swing.JLabel jLabel43;
     private javax.swing.JLabel jLabel44;
+    private javax.swing.JLabel jLabel45;
+    private javax.swing.JLabel jLabel46;
+    private javax.swing.JLabel jLabel47;
+    private javax.swing.JLabel jLabel48;
     private javax.swing.JLabel jLabel5;
     private javax.swing.JLabel jLabel6;
     private javax.swing.JLabel jLabel7;
@@ -2332,6 +3047,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JPanel jPanel16;
     private javax.swing.JPanel jPanel17;
     private javax.swing.JPanel jPanel18;
+    private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel4;
     private javax.swing.JPanel jPanel5;
     private javax.swing.JScrollPane jScrollPane1;
@@ -2339,27 +3055,26 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPane3;
     private javax.swing.JScrollPane jScrollPane4;
     private javax.swing.JScrollPane jScrollPane5;
+    private javax.swing.JScrollPane jScrollPane6;
     private javax.swing.JTabbedPane jTabbedPane1;
     private javax.swing.JTextField txtApellido;
     private javax.swing.JTextField txtBuscar;
     private javax.swing.JTextField txtBuscarCliente;
-    private javax.swing.JButton txtBuscarFechaVenta;
     private javax.swing.JTextField txtCantidad;
     private javax.swing.JTextField txtCantidadCompra;
     private javax.swing.JTextField txtCedula;
+    private javax.swing.JTextField txtCuentaCorriente;
     private javax.swing.JTextField txtDescripcionCompra;
     private javax.swing.JTextField txtDescripcionP;
     private javax.swing.JTextField txtDescuento;
+    private javax.swing.JTextField txtDevoluciones;
     private javax.swing.JTextField txtDireccion;
     private javax.swing.JTextField txtEfectivo;
-    private javax.swing.JTextField txtEfectivo1;
-    private javax.swing.JTextField txtEfectivo2;
-    private javax.swing.JTextField txtEfectivo3;
-    private javax.swing.JTextField txtEfectivo4;
-    private javax.swing.JTextField txtEfectivo5;
     private javax.swing.JButton txtExportar;
     private javax.swing.JTextField txtFechaFin;
+    private javax.swing.JTextField txtFechaFin2;
     private javax.swing.JTextField txtFechaInicial;
+    private javax.swing.JTextField txtFechaInicial2;
     private javax.swing.JTextField txtIngresoTotal;
     private javax.swing.JTextField txtNFactura;
     private javax.swing.JTextField txtNombre;
@@ -2367,10 +3082,14 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JTextField txtPrecioP;
     private javax.swing.JTextField txtPrecioVentaCompra;
     private javax.swing.JTextField txtRefCodigoCompra;
+    private javax.swing.JTextField txtRol;
     private javax.swing.JTextField txtStockCompra;
     private javax.swing.JTextField txtStockP;
+    private javax.swing.JTextField txtTarjeta;
     private javax.swing.JTextField txtTelefono;
+    private javax.swing.JTextField txtTotalCaja;
     private javax.swing.JTextField txtTotalV;
+    private javax.swing.JTextField txtTransferencia;
     private javax.swing.JTextField txtrefcodigo;
     // End of variables declaration//GEN-END:variables
 }

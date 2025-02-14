@@ -15,7 +15,6 @@ import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.pdf.PdfPCell;
 import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
-import java.awt.Desktop;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.sql.PreparedStatement;
@@ -28,23 +27,29 @@ import java.sql.ResultSet;
  * @author Juanm
  */
 import com.itextpdf.text.*;
-import com.itextpdf.text.pdf.*;
 import java.awt.Desktop;
 import java.io.*;
 import java.sql.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.print.Doc;
+import javax.print.DocFlavor;
+import javax.print.DocPrintJob;
+import javax.print.PrintService;
+import javax.print.PrintServiceLookup;
+import javax.print.SimpleDoc;
+import javax.print.attribute.HashPrintRequestAttributeSet;
 
 public class Ticket {
 
-    private static final String RUTA_PDF = "C:\\Users\\Juanm\\Downloads";
+    private static final String RUTA_PDF = "C:\\Users\\Juanm\\Downloads\\";
     private static final String LOGO_PATH = "src/imagenes/Tecnimotos-logo-grande.png";
     private static final String DB_URL = "jdbc:mysql://127.0.0.1/tecnimotosjm";
     private static final String DB_USER = "root";
     private static final String DB_PASSWORD = "";
 
     public void generarTicketPDF(int idVenta) {
-        String rutaPDF = RUTA_PDF + idVenta + ".pdf";
+        String rutaPDF = RUTA_PDF + "Ticket_" + idVenta + ".pdf";
 
         try (Connection con = getConnection()) {
             Document documento = new Document(PageSize.A7);
@@ -53,14 +58,17 @@ public class Ticket {
 
             agregarLogo(documento);
             agregarDatosEmpresa(documento);
+            documento.add(new Paragraph("\n"));
             agregarDatosFactura(documento, con, idVenta);
+            documento.add(new Paragraph("\n"));
             agregarDetalleProductos(documento, con, idVenta);
-
             documento.close();
+
             abrirPDF(rutaPDF);
+            imprimirPDF(rutaPDF); // Imprime el ticket automáticamente
 
         } catch (Exception e) {
-            Logger.getLogger(Ticket.class.getName()).log(Level.SEVERE, "Error generando ticket", e);
+            e.printStackTrace();
         }
     }
 
@@ -71,16 +79,18 @@ public class Ticket {
     private void agregarLogo(Document documento) {
         try {
             Image logo = Image.getInstance(LOGO_PATH);
-            logo.scaleToFit(80, 50);
+            logo.scaleToFit(120, 80);  // Aumentar tamaño del logo
             logo.setAlignment(Element.ALIGN_CENTER);
             documento.add(logo);
+            documento.add(new Paragraph("\n"));
         } catch (Exception e) {
-            Logger.getLogger(Ticket.class.getName()).log(Level.WARNING, "No se pudo cargar el logo.", e);
+            e.printStackTrace();
         }
     }
 
     private void agregarDatosEmpresa(Document documento) throws DocumentException {
-        Paragraph empresa = new Paragraph("NIT: 123456789\nNo responsable de IVA\nDirección: Calle 123\nTeléfono: 555-1234\n\n",
+        Paragraph empresa = new Paragraph(
+                "NIT: 123456789\nNo responsable de IVA\nDirección: Calle 123\nTeléfono: 555-1234\n\n",
                 new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD));
         empresa.setAlignment(Element.ALIGN_CENTER);
         documento.add(empresa);
@@ -98,7 +108,7 @@ public class Ticket {
                 if (rs.next()) {
                     Paragraph datosFactura = new Paragraph(
                             "Factura #" + idVenta + "\nFecha: " + rs.getString(1)
-                            + "\nCliente: " + rs.getString(2),
+                            + "\nCliente: " + rs.getString(2) + "\n",
                             new Font(Font.FontFamily.HELVETICA, 10));
                     datosFactura.setAlignment(Element.ALIGN_LEFT);
                     documento.add(datosFactura);
@@ -135,8 +145,7 @@ public class Ticket {
         }
 
         documento.add(tabla);
-
-        // Agregar Totales
+        documento.add(new Paragraph("\n"));
         agregarTotales(documento, con, idVenta);
     }
 
@@ -149,7 +158,7 @@ public class Ticket {
                 if (rs.next()) {
                     Paragraph totales = new Paragraph(
                             "\nTotal: $" + rs.getDouble(1),
-                            new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD));
+                            new Font(Font.FontFamily.HELVETICA, 12, Font.BOLD));
                     totales.setAlignment(Element.ALIGN_RIGHT);
                     documento.add(totales);
                 }
@@ -172,7 +181,25 @@ public class Ticket {
                 Desktop.getDesktop().open(file);
             }
         } catch (IOException e) {
-            Logger.getLogger(Ticket.class.getName()).log(Level.WARNING, "No se pudo abrir el PDF.", e);
+            e.printStackTrace();
+        }
+    }
+
+    private void imprimirPDF(String rutaPDF) {
+        try {
+            FileInputStream fis = new FileInputStream(rutaPDF);
+            Doc pdfDoc = new SimpleDoc(fis, DocFlavor.INPUT_STREAM.AUTOSENSE, null);
+            PrintService service = PrintServiceLookup.lookupDefaultPrintService();
+
+            if (service != null) {
+                DocPrintJob job = service.createPrintJob();
+                job.print(pdfDoc, new HashPrintRequestAttributeSet());
+            } else {
+                System.out.println("No se encontró una impresora predeterminada.");
+            }
+            fis.close();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

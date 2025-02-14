@@ -9,19 +9,29 @@ package Modelo;
  * @author Juanm
  */
 public class Proveedor {
-    private String Proveedor;
 
-    public Proveedor(String Proveedor) {
-        this.Proveedor = Proveedor;
-    }
+    private int id;
+    private String nombre;
 
-    public String getProveedor() {
-        return Proveedor;
-    }
-
-    public void setProveedor(String Proveedor) {
-        this.Proveedor = Proveedor;
+    public Proveedor(int id, String nombre) {
+        this.id = id;
+        this.nombre = nombre;
     }
     
-    
+    public Proveedor(){
+        
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public String getNombre() {
+        return nombre;
+    }
+
+    @Override
+    public String toString() {
+        return nombre;  // Esto hace que en el JComboBox solo se vea el nombre
+    }
 }
