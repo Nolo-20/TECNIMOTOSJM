@@ -4,7 +4,7 @@
  */
 package Interfaces;
 
-import Controladores.Conexion;
+import Config.Conexion;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -58,9 +58,9 @@ public class Interfaz_Registro extends javax.swing.JFrame {
 
             JOptionPane.showMessageDialog(this, "Usuario registrado exitosamente con rol Vendedor.");
             this.dispose(); // Cierra la ventana de registro
-            login.setLocationRelativeTo(null);
             
-            new Interfaz_Login().setVisible(true); // Regresa a la ventana de login
+            login.setVisible(true);
+            login.setLocationRelativeTo(null);
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Error en la base de datos: " + e.getMessage());
         }

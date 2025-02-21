@@ -4,12 +4,16 @@
  */
 package Interfaces;
 
-import Controladores.Conexion;
+import Config.Conexion;
+import Modelo.SessionManager;
+import java.awt.event.KeyEvent;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 import org.mindrot.jbcrypt.BCrypt;
+import java.sql.SQLException;
 
 /**
  *
@@ -32,6 +36,44 @@ public class Interfaz_Login extends javax.swing.JFrame {
         almacen.setVisible(true);
         almacen.setLocationRelativeTo(null);
         this.dispose(); // Cierra la ventana de login
+    }
+
+    public boolean iniciarSesion(String usuario, String contrasena) {
+        String sql = "SELECT usuario, contrasena, rol FROM usuario WHERE usuario = ?";
+
+        try {
+            ps = conexion.prepareStatement(sql);
+            ps.setString(1, usuario);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                String nombreUsuario = rs.getString("usuario"); // Obtener el nombre del usuario
+                String passwordAlmacenada = rs.getString("contrasena");
+                String rol = rs.getString("rol");
+
+                // Manejar el caso del admin con contraseña en texto plano
+                if ("admin".equalsIgnoreCase(usuario) && !passwordAlmacenada.startsWith("$2a$")) {
+                    if (passwordAlmacenada.equals(contrasena)) {
+                        SessionManager.setNombreUsuarioActual(nombreUsuario); // Guardar nombre
+                        SessionManager.setRolUsuarioActual(rol);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+
+                // Validar usuarios con BCrypt
+                if (BCrypt.checkpw(contrasena, passwordAlmacenada)) {
+                    SessionManager.setNombreUsuarioActual(nombreUsuario); // Guardar nombre
+                    SessionManager.setRolUsuarioActual(rol);
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return false;
     }
 
     /**
@@ -110,6 +152,11 @@ public class Interfaz_Login extends javax.swing.JFrame {
                 txtUsuarioMousePressed(evt);
             }
         });
+        txtUsuario.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyPressed(java.awt.event.KeyEvent evt) {
+                txtUsuarioKeyPressed(evt);
+            }
+        });
         jPanel2.add(txtUsuario, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 280, 260, 30));
 
         jSeparator1.setForeground(new java.awt.Color(51, 51, 51));
@@ -128,6 +175,11 @@ public class Interfaz_Login extends javax.swing.JFrame {
         txtContrasena.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 txtContrasenaActionPerformed(evt);
+            }
+        });
+        txtContrasena.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyPressed(java.awt.event.KeyEvent evt) {
+                txtContrasenaKeyPressed(evt);
             }
         });
         jPanel2.add(txtContrasena, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 350, 260, 30));
@@ -188,7 +240,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
     }//GEN-LAST:event_txtUsuarioMousePressed
 
     private void txtContrasenaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtContrasenaActionPerformed
-        
+
     }//GEN-LAST:event_txtContrasenaActionPerformed
 
     private void btnRegistrarUActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegistrarUActionPerformed
@@ -202,43 +254,20 @@ public class Interfaz_Login extends javax.swing.JFrame {
         String usuario = txtUsuario.getText().trim();
         String contrasena = new String(txtContrasena.getPassword()).trim();
 
-        // 1️⃣ VALIDAR CAMPOS VACÍOS
         if (usuario.isEmpty() || contrasena.isEmpty()) {
             JOptionPane.showMessageDialog(this, "Por favor, ingrese usuario y contraseña.");
             return;
         }
 
-        // 2️⃣ CONSULTAR USUARIO EN LA BASE DE DATOS
-        String sql = "SELECT Contrasena, Rol FROM Usuario WHERE Usuario = ?";
+        // Llamamos a la función corregida
+        if (iniciarSesion(usuario, contrasena)) {
+            String rol = SessionManager.getRolUsuarioActual();
+            JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso.");
 
-        try {
-            ps = conexion.prepareStatement(sql);
-
-            ps.setString(1, usuario);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-                String hashedPassword = rs.getString("Contrasena"); // Contraseña almacenada en la BD
-                String rol = rs.getString("Rol"); // Obtener el rol del usuario
-
-                // 3️⃣ CASO ESPECIAL: SI ES "Admin", COMPARAR DIRECTAMENTE
-                if (usuario.equals("Admin") && contrasena.equals(hashedPassword)) {
-                    JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso como Administrador.");
-                    abrirInterfaz(rol);
-                } // 4️⃣ PARA OTROS USUARIOS, USAR BCrypt
-                else if (BCrypt.checkpw(contrasena, hashedPassword)) {
-                    JOptionPane.showMessageDialog(this, "Inicio de sesión exitoso.");
-                    abrirInterfaz(rol);
-                } // 5️⃣ CONTRASEÑA INCORRECTA
-                else {
-                    JOptionPane.showMessageDialog(this, "Contraseña incorrecta.");
-                }
-            } else {
-                JOptionPane.showMessageDialog(this, "Usuario no encontrado.");
-            }
-
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error al conectar con la base de datos: " + e.getMessage());
+            // Abre la interfaz correspondiente
+            abrirInterfaz(rol);
+        } else {
+            JOptionPane.showMessageDialog(this, "Usuario o contraseña incorrectos.");
         }
     }//GEN-LAST:event_btnIngresarActionPerformed
 
@@ -252,6 +281,18 @@ public class Interfaz_Login extends javax.swing.JFrame {
 //            txtUsuario.setForeground(Color.gray);
 //        }
     }//GEN-LAST:event_txtContrasenaMousePressed
+
+    private void txtUsuarioKeyPressed(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtUsuarioKeyPressed
+        if (evt.getKeyCode() == KeyEvent.VK_ENTER) {
+            btnIngresar.doClick(); // Simula un clic en el botón de inicio de sesión
+        }
+    }//GEN-LAST:event_txtUsuarioKeyPressed
+
+    private void txtContrasenaKeyPressed(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtContrasenaKeyPressed
+        if (evt.getKeyCode() == KeyEvent.VK_ENTER) {
+            btnIngresar.doClick(); // Simula un clic en el botón de inicio de sesión
+        }
+    }//GEN-LAST:event_txtContrasenaKeyPressed
 
     /**
      * @param args the command line arguments

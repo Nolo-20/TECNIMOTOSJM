@@ -4,8 +4,9 @@
  */
 package Interfaces;
 
-import Controladores.Conexion;
-import Controladores.Ticket;
+import Config.Conexion;
+import Modelo.SessionManager;
+import Utilidades.Ticket;
 import java.util.List;
 import java.sql.Statement;
 import java.sql.Connection;
@@ -42,7 +43,6 @@ public class Interfaz_Pago extends javax.swing.JFrame {
 
         // Mostrar los datos en la interfaz
 //        txtTotalPagar.setText(String.format("$%.2f", total));
-
         // Mostrar los productos en un JTextArea o JTable
         for (String producto : productos) {
             System.out.println("Producto: " + producto);
@@ -60,6 +60,9 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     // Método para limpiar la tabla de la ventana de almacén
     private void limpiarTablaVenta() {
         VentanaAlmacen.limpiarTablaVenta(); // Llama al método de limpieza
+    }
+    
+    private void CalcularTotal(){
     }
 
     private void calcularCambio() {
@@ -135,6 +138,9 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         // Registrar la venta en la tabla Venta
         int idVenta = registrarVenta(idCliente, idPago, totalVenta, cambio);
 
+        // Obtener el nombre de usuario (no el rol)
+        String usuarioActual = SessionManager.getNombreUsuarioActual();
+
         if (idVenta > 0) {
             // Registrar los productos vendidos en la tabla Factura
             for (String producto : productos) {
@@ -149,11 +155,11 @@ public class Interfaz_Pago extends javax.swing.JFrame {
             // Actualizar el stock de los productos (si es necesario)
             actualizarStock(productos);
 
-            // Generar el recibo de la venta
+            // Generar el recibo de la venta con el nombre de usuario correcto
             Ticket ticket = new Ticket();
-            ticket.generarTicketPDF(idVenta);
+            ticket.generarTicketPDF(idVenta, usuarioActual);
 
-            //limpiar Tabla Despues de realizar Pago 
+            // Limpiar la tabla después del pago
             limpiarTablaVenta();
 
             // Mostrar mensaje de éxito

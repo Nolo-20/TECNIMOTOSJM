@@ -4,7 +4,8 @@
  */
 package Interfaces;
 
-import Controladores.Conexion;
+import Config.Conexion;
+import Modelo.SessionManager;
 import java.awt.event.KeyEvent;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -31,6 +33,9 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormat;
+import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -65,6 +70,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         AutoCompleteDecorator.decorate(boxProveedorCompra);
         historialVenta();
         ReporteCaja();
+        configurarPermisos();
     }
 
     public Interfaz_Almacen() {
@@ -72,12 +78,13 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     private void configurarPermisos() {
-        txtRol.setText(rol); // Muestra el rol en un TextField
+        String rol = SessionManager.getRolUsuarioActual(); // Obtener el rol del usuario
 
-        if (rol.equals("Vendedor")) {
+        txtRol.setText(rol); // Mostrar el rol en la interfaz
+
+        if ("Vendedor".equals(rol)) {
             btnEliminarCliente.setEnabled(false);
-            //JOptionPane.showMessageDialog(this, "Acceso restringido: No puedes eliminar productos o clientes.");
-        } else if (rol.equals("Administrador")) {
+        } else if ("Administrador".equals(rol)) {
             btnEliminarCliente.setEnabled(true);
         }
     }
@@ -169,44 +176,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
     }
 
-    //eliminar producto de la tabla del inventario
-//    private void eliminarProducto() {
-//        int filaSeleccionada = TablaInventario.getSelectedRow();
-//
-//        if (filaSeleccionada == -1) {
-//            JOptionPane.showMessageDialog(this, "Selecciona un producto para eliminar.");
-//            return;
-//        }
-//
-//        // Obtener el código del producto seleccionado
-//        String codigoProducto = TablaInventario.getValueAt(filaSeleccionada, 0).toString();
-//
-//        int confirmacion = JOptionPane.showConfirmDialog(this,
-//                "¿Estás seguro de eliminar el producto " + codigoProducto + "?",
-//                "Confirmar eliminación", JOptionPane.YES_NO_OPTION);
-//
-//        if (confirmacion == JOptionPane.YES_OPTION) {
-//            try {
-//                String sql = "UPDATE Producto SET Estado = 'Inactivo' WHERE Codigo = ?";
-//                ps = conexion.prepareStatement(sql);
-//                ps.setString(1, codigoProducto);
-//
-//                int filasAfectadas = ps.executeUpdate();
-//
-//                if (filasAfectadas > 0) {
-//                    DefaultTableModel modelo = (DefaultTableModel) TablaInventario.getModel();
-//                    modelo.removeRow(filaSeleccionada);
-//                    JOptionPane.showMessageDialog(this, "Producto eliminado correctamente.");
-//                    CalcularTotalInventario(); // Actualizar total de inventario
-//                } else {
-//                    JOptionPane.showMessageDialog(this, "No se pudo eliminar el producto.");
-//                }
-//
-//            } catch (SQLException e) {
-//                JOptionPane.showMessageDialog(this, "Error al eliminar el producto: " + e.getMessage());
-//            }
-//        }
-//    }
     //REPORTE DE CAJA
     public void ReporteCaja() {
         String sql = "SELECT Metodo_Pago, Total FROM ("
@@ -267,32 +236,62 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     public void exportarAExcel() {
-        // Obtener el modelo de la tabla
         DefaultTableModel modelo = (DefaultTableModel) TablaInventario.getModel();
-
-        // Crear un nuevo libro de Excel
         Workbook libro = new XSSFWorkbook();
         Sheet hoja = libro.createSheet("Inventario");
 
-        // Crear la fila de encabezados
+        // Crear estilos para las celdas
+        CellStyle estiloTexto = libro.createCellStyle();
+        CellStyle estiloNumero = libro.createCellStyle();
+        CellStyle estiloEncabezado = libro.createCellStyle();
+
+        // Fuente en negrita para encabezados
+        Font fuenteEncabezado = libro.createFont();
+        fuenteEncabezado.setBold(true);
+        estiloEncabezado.setFont(fuenteEncabezado);
+
+        // Formato para números
+        DataFormat formato = libro.createDataFormat();
+        estiloNumero.setDataFormat(formato.getFormat("#,##0.00"));
+
+        // Crear fila de encabezados con estilo
         Row filaEncabezados = hoja.createRow(0);
         for (int i = 0; i < modelo.getColumnCount(); i++) {
             Cell celda = filaEncabezados.createCell(i);
             celda.setCellValue(modelo.getColumnName(i));
+            celda.setCellStyle(estiloEncabezado);
         }
 
         // Llenar la hoja con los datos de la tabla
         for (int i = 0; i < modelo.getRowCount(); i++) {
-            Row fila = hoja.createRow(i + 1); // +1 para evitar sobrescribir los encabezados
+            Row fila = hoja.createRow(i + 1);
             for (int j = 0; j < modelo.getColumnCount(); j++) {
                 Cell celda = fila.createCell(j);
                 Object valor = modelo.getValueAt(i, j);
+
                 if (valor != null) {
-                    celda.setCellValue(valor.toString());
+                    // Detectar tipo de dato y aplicar formato
+                    if (valor instanceof Number) {
+                        celda.setCellValue(((Number) valor).doubleValue());
+                        celda.setCellStyle(estiloNumero);
+                    } else if (valor instanceof java.util.Date) {
+                        CellStyle estiloFecha = libro.createCellStyle();
+                        estiloFecha.setDataFormat(libro.createDataFormat().getFormat("dd/MM/yyyy"));
+                        celda.setCellValue((java.util.Date) valor);
+                        celda.setCellStyle(estiloFecha);
+                    } else {
+                        celda.setCellValue(valor.toString());
+                        celda.setCellStyle(estiloTexto);
+                    }
                 } else {
                     celda.setCellValue(""); // Celda vacía si el valor es nulo
                 }
             }
+        }
+
+        // Ajustar automáticamente el ancho de las columnas
+        for (int i = 0; i < modelo.getColumnCount(); i++) {
+            hoja.autoSizeColumn(i);
         }
 
         // Guardar el archivo Excel
@@ -431,6 +430,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private double calcularTotal() {
         double total = 0.0;
 
+        if (TablaVenta.getRowCount() == 0) { // Si no hay productos en la tabla
+            txtTotalV.setText("0.00"); // Asegurar que el total siempre sea cero
+            return total;
+        }
+
         for (int i = 0; i < TablaVenta.getRowCount(); i++) {
             double precio = Double.parseDouble(TablaVenta.getValueAt(i, 3).toString()); // Columna 3 es el precio
             int cantidad = Integer.parseInt(TablaVenta.getValueAt(i, 2).toString()); // Columna 2 es la cantidad
@@ -440,15 +444,42 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         return total;
     }
 
-    private void aplicarDescuento() {
-        double total = Double.parseDouble(txtTotalV.getText());
-        if (!txtDescuento.getText().isEmpty()) {
-            double descuento = Double.parseDouble(txtDescuento.getText());
-            total -= total * (descuento / 100);
-        }
-        txtTotalV.setText(String.format("%.2f", total));
-    }
-
+//    private double totalOriginal = 0.0; // Guarda el total sin descuento
+//
+//// ⚡ Se llama solo cuando se agregan/quitan productos, no en cada tecla.
+//    private void actualizarTotal() {
+//        totalOriginal = calcularTotal(); // Solo recalcula el total original cuando cambian los productos
+//        aplicarDescuento(); // Aplica el descuento correctamente
+//    }
+//
+//// ⚡ Se ejecuta en cada pulsación, pero no modifica totalOriginal
+//    private void aplicarDescuento() {
+//        double total = totalOriginal; // Siempre partimos del total original
+//
+//        String textoDescuento = txtDescuento.getText().trim();
+//
+//        if (!textoDescuento.isEmpty()) {
+//            try {
+//                double descuento = Double.parseDouble(textoDescuento);
+//
+//                // Validar que el descuento sea un porcentaje válido entre 0 y 100
+//                if (descuento < 0 || descuento > 100) {
+//                    JOptionPane.showMessageDialog(null, "Ingrese un porcentaje de descuento entre 0 y 100.");
+//                    txtDescuento.setText(""); // Limpiar el campo
+//                    return;
+//                }
+//
+//                total -= totalOriginal * (descuento / 100.0); // Aplicar descuento correctamente
+//            } catch (NumberFormatException e) {
+//                JOptionPane.showMessageDialog(null, "Ingrese un número válido para el descuento.");
+//                txtDescuento.setText(""); // Limpiar si hay error
+//                return;
+//            }
+//        }
+//
+//        // Mostrar el total actualizado en el campo
+//        txtTotalV.setText(String.format("%.2f", total));
+//    }
     private void asignarCliente() {
         try {
             String sql = "SELECT ID, Nombre FROM cliente";
@@ -639,11 +670,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         }
     }
 
-    private String obtenerClienteSeleccionado() {
-        String clienteSeleccionado = boxCliente.getSelectedItem().toString();
-        return clienteSeleccionado; // Devuelve algo como "1 - Consumidor Final"
-    }
-
     private void abrirVentanaPago() {
         double total = calcularTotal();
 
@@ -691,6 +717,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     public void limpiarTablaVenta() {
         DefaultTableModel modelo = (DefaultTableModel) TablaVenta.getModel();
         modelo.setRowCount(0); // Borra todas las filas de la tabla
+
+        calcularTotal();
     }
 
     private void actualizarProductoDesdeTabla(int fila) {
@@ -789,7 +817,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 txtStockCompra.setText(rs.getString("Stock"));
                 txtCantidadCompra.setEnabled(true);
                 txtPrecioCostoCompra.setEnabled(true);
-                boxProveedorCompra.setEnabled(false); // Bloquea proveedor si ya existe
+                boxProveedorCompra.setEnabled(true); // Bloquea proveedor si ya existe
             } else {
                 // Producto NO existe, preguntar si se quiere agregar
                 int opcion = JOptionPane.showConfirmDialog(null,
@@ -961,47 +989,16 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         }
     }
 
-    public void exportarHistorialVenta() {
-        DefaultTableModel modelo = (DefaultTableModel) TablaVentaHistorial.getModel();
-        Workbook libro = new XSSFWorkbook();
-        Sheet hoja = libro.createSheet("Historial de Ventas");
-
-        Row filaEncabezado = hoja.createRow(0);
-        for (int i = 0; i < modelo.getColumnCount(); i++) {
-            Cell celda = filaEncabezado.createCell(i);
-            celda.setCellValue(modelo.getColumnName(i));
-        }
-
-        for (int i = 0; i < modelo.getRowCount(); i++) {
-            Row fila = hoja.createRow(i + 1);
-            for (int j = 0; j < modelo.getColumnCount(); j++) {
-                Cell celda = fila.createCell(j);
-                Object valor = modelo.getValueAt(i, j);
-                if (valor != null) {
-                    celda.setCellValue(valor.toString());
-                }
-            }
-        }
-
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Guardar archivo Excel");
-        int seleccionUsuario = fileChooser.showSaveDialog(null);
-        if (seleccionUsuario == JFileChooser.APPROVE_OPTION) {
-            try (FileOutputStream archivo = new FileOutputStream(fileChooser.getSelectedFile() + ".xlsx")) {
-                libro.write(archivo);
-                JOptionPane.showMessageDialog(null, "Historial exportado correctamente.");
-            } catch (IOException e) {
-                JOptionPane.showMessageDialog(null, "Error al exportar: " + e.getMessage());
-            }
-        }
-    }
-
     public void buscarPorFecha() {
         String fechaInicio = convertirFecha(txtFechaInicial.getText().trim());
         String fechaFin = convertirFecha(txtFechaFin.getText().trim());
 
         if (fechaInicio == null || fechaFin == null) {
             return; // Si la conversión falla, salir del método
+        }
+
+        if (fechaInicio.isEmpty() || fechaFin.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "Ingrese los Campos");
         }
 
         DefaultTableModel modelo = (DefaultTableModel) TablaVentaHistorial.getModel();
@@ -1103,37 +1100,79 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
 // Función para exportar el historial de compras a Excel
-    public void exportarHistorialCompra() {
-        DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
-        Workbook libro = new XSSFWorkbook();
-        Sheet hoja = libro.createSheet("Historial de Compras");
+    public class ExportadorExcelHistorial {
 
-        Row filaEncabezado = hoja.createRow(0);
-        for (int i = 0; i < modelo.getColumnCount(); i++) {
-            Cell celda = filaEncabezado.createCell(i);
-            celda.setCellValue(modelo.getColumnName(i));
+        public void exportarHistorialVenta(JTable TablaVentaHistorial) {
+            exportarDatos(TablaVentaHistorial, "Historial de Ventas");
         }
 
-        for (int i = 0; i < modelo.getRowCount(); i++) {
-            Row fila = hoja.createRow(i + 1);
-            for (int j = 0; j < modelo.getColumnCount(); j++) {
-                Cell celda = fila.createCell(j);
-                Object valor = modelo.getValueAt(i, j);
-                if (valor != null) {
-                    celda.setCellValue(valor.toString());
+        public void exportarHistorialCompra(JTable TablaHistorialCompra) {
+            exportarDatos(TablaHistorialCompra, "Historial de Compras");
+        }
+
+        private void exportarDatos(JTable tabla, String nombreHoja) {
+            DefaultTableModel modelo = (DefaultTableModel) tabla.getModel();
+            Workbook libro = new XSSFWorkbook();
+            Sheet hoja = libro.createSheet(nombreHoja);
+            CellStyle estiloNumerico = libro.createCellStyle();
+            estiloNumerico.setDataFormat(libro.createDataFormat().getFormat("#,##0.00"));
+
+            CellStyle estiloFecha = libro.createCellStyle();
+            estiloFecha.setDataFormat(libro.createDataFormat().getFormat("dd/MM/yyyy"));
+
+            // Crear encabezado
+            Row filaEncabezado = hoja.createRow(0);
+            for (int i = 0; i < modelo.getColumnCount(); i++) {
+                Cell celda = filaEncabezado.createCell(i);
+                celda.setCellValue(modelo.getColumnName(i));
+                CellStyle estiloEncabezado = libro.createCellStyle();
+                Font font = libro.createFont();
+                font.setBold(true);
+                estiloEncabezado.setFont(font);
+                celda.setCellStyle(estiloEncabezado);
+            }
+
+            // Llenar datos de la tabla
+            for (int i = 0; i < modelo.getRowCount(); i++) {
+                Row fila = hoja.createRow(i + 1);
+                for (int j = 0; j < modelo.getColumnCount(); j++) {
+                    Cell celda = fila.createCell(j);
+                    Object valor = modelo.getValueAt(i, j);
+
+                    if (valor instanceof Number) {
+                        celda.setCellValue(((Number) valor).doubleValue());
+                        celda.setCellStyle(estiloNumerico);
+                    } else if (valor instanceof Date) {
+                        celda.setCellValue((Date) valor);
+                        celda.setCellStyle(estiloFecha);
+                    } else {
+                        celda.setCellValue(valor != null ? valor.toString() : "");
+                    }
                 }
             }
-        }
 
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Guardar archivo Excel");
-        int seleccionUsuario = fileChooser.showSaveDialog(null);
-        if (seleccionUsuario == JFileChooser.APPROVE_OPTION) {
-            try (FileOutputStream archivo = new FileOutputStream(fileChooser.getSelectedFile() + ".xlsx")) {
-                libro.write(archivo);
-                JOptionPane.showMessageDialog(null, "Historial exportado correctamente.");
-            } catch (IOException e) {
-                JOptionPane.showMessageDialog(null, "Error al exportar: " + e.getMessage());
+            // Ajustar automáticamente el tamaño de las columnas
+            for (int i = 0; i < modelo.getColumnCount(); i++) {
+                hoja.autoSizeColumn(i);
+            }
+
+            // Guardar archivo
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Guardar archivo Excel");
+            int seleccionUsuario = fileChooser.showSaveDialog(null);
+            if (seleccionUsuario == JFileChooser.APPROVE_OPTION) {
+                try (FileOutputStream archivo = new FileOutputStream(fileChooser.getSelectedFile() + ".xlsx")) {
+                    libro.write(archivo);
+                    JOptionPane.showMessageDialog(null, "Datos exportados correctamente.");
+                } catch (IOException e) {
+                    JOptionPane.showMessageDialog(null, "Error al exportar el archivo: " + e.getMessage());
+                } finally {
+                    try {
+                        libro.close();
+                    } catch (IOException e) {
+                        JOptionPane.showMessageDialog(null, "Error al cerrar el libro: " + e.getMessage());
+                    }
+                }
             }
         }
     }
@@ -1145,6 +1184,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         if (fechaInicio == null || fechaFin == null) {
             return; // Si la conversión falla, salir del método
+        }
+
+        if (fechaInicio.isEmpty() || fechaFin.isEmpty()) {
+            JOptionPane.showMessageDialog(null, "Ingrese los Campos");
         }
 
         DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
@@ -1225,7 +1268,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         modelo.removeRow(filaSeleccionada);
     }
 
-    //Quitar un producto en la Tabla Venta
+    // Quitar un producto en la Tabla Venta
     private void QuitarProductoVenta() {
         DefaultTableModel modelo = (DefaultTableModel) TablaVenta.getModel();
         int filaSeleccionada = TablaVenta.getSelectedRow();
@@ -1237,9 +1280,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         // Eliminar la fila seleccionada
         modelo.removeRow(filaSeleccionada);
-
-        // Actualizar el total después de quitar el producto
-        txtTotalV.setText(String.format("%.2f", calcularTotal()));
     }
 
     //stock bajo en la tabla producto
@@ -1348,8 +1388,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         TablaVenta = new javax.swing.JTable();
         txtTotalV = new javax.swing.JTextField();
         btnRegistrar = new javax.swing.JButton();
-        jLabel24 = new javax.swing.JLabel();
-        txtDescuento = new javax.swing.JTextField();
         Cliente = new javax.swing.JPanel();
         jPanel13 = new javax.swing.JPanel();
         jLabel17 = new javax.swing.JLabel();
@@ -1888,6 +1926,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 jButton11ActionPerformed(evt);
             }
         });
+        jButton11.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyReleased(java.awt.event.KeyEvent evt) {
+                jButton11KeyReleased(evt);
+            }
+        });
         jPanel16.add(jButton11, new org.netbeans.lib.awtextra.AbsoluteConstraints(610, 110, 110, 50));
 
         txtCantidad.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
@@ -1967,20 +2010,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
         jPanel12.add(btnRegistrar, new org.netbeans.lib.awtextra.AbsoluteConstraints(930, 560, 120, 50));
-
-        jLabel24.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
-        jLabel24.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel24.setText("DESCUENTO:");
-        jPanel12.add(jLabel24, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 580, -1, -1));
-
-        txtDescuento.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
-        txtDescuento.setBorder(null);
-        txtDescuento.addKeyListener(new java.awt.event.KeyAdapter() {
-            public void keyReleased(java.awt.event.KeyEvent evt) {
-                txtDescuentoKeyReleased(evt);
-            }
-        });
-        jPanel12.add(txtDescuento, new org.netbeans.lib.awtextra.AbsoluteConstraints(580, 580, 140, 30));
 
         javax.swing.GroupLayout VentaLayout = new javax.swing.GroupLayout(Venta);
         Venta.setLayout(VentaLayout);
@@ -2520,7 +2549,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         );
         HistorialCompraLayout.setVerticalGroup(
             HistorialCompraLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE)
+            .addComponent(jPanel2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 668, Short.MAX_VALUE)
         );
 
         jTabbedPane1.addTab("tab7", HistorialCompra);
@@ -2554,6 +2583,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jTabbedPane1.setSelectedIndex(2);
         asignarCliente();
         configurarTablaVenta();
+        calcularTotal();
     }//GEN-LAST:event_jButton3ActionPerformed
 
     private void jButton4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton4ActionPerformed
@@ -2620,10 +2650,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private void txtPrecioPActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtPrecioPActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_txtPrecioPActionPerformed
-
-    private void txtDescuentoKeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_txtDescuentoKeyReleased
-        aplicarDescuento();
-    }//GEN-LAST:event_txtDescuentoKeyReleased
 
     private void txtrefcodigoActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtrefcodigoActionPerformed
         // TODO add your handling code here:
@@ -2732,7 +2758,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }//GEN-LAST:event_txtRefCodigoCompraKeyTyped
 
     private void btnExportarVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarVentaActionPerformed
-        exportarHistorialVenta();
+        ExportadorExcelHistorial ex = new ExportadorExcelHistorial();
+        ex.exportarHistorialVenta(TablaVentaHistorial);
     }//GEN-LAST:event_btnExportarVentaActionPerformed
 
     private void btnBuscarFechaVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBuscarFechaVentaActionPerformed
@@ -2906,12 +2933,17 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }//GEN-LAST:event_btnBuscarFechaCompraActionPerformed
 
     private void btnExportarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnExportarCompraActionPerformed
-        exportarHistorialCompra();
+        ExportadorExcelHistorial ex = new ExportadorExcelHistorial();
+        ex.exportarHistorialCompra(TablaHistorialCompra);
     }//GEN-LAST:event_btnExportarCompraActionPerformed
 
     private void btnActualizarHistorialCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarHistorialCompraActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_btnActualizarHistorialCompraActionPerformed
+
+    private void jButton11KeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_jButton11KeyReleased
+        // TODO add your handling code here:
+    }//GEN-LAST:event_jButton11KeyReleased
 
     /**
      * @param args the command line arguments
@@ -3005,7 +3037,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel21;
     private javax.swing.JLabel jLabel22;
     private javax.swing.JLabel jLabel23;
-    private javax.swing.JLabel jLabel24;
     private javax.swing.JLabel jLabel25;
     private javax.swing.JLabel jLabel26;
     private javax.swing.JLabel jLabel27;
@@ -3066,7 +3097,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JTextField txtCuentaCorriente;
     private javax.swing.JTextField txtDescripcionCompra;
     private javax.swing.JTextField txtDescripcionP;
-    private javax.swing.JTextField txtDescuento;
     private javax.swing.JTextField txtDevoluciones;
     private javax.swing.JTextField txtDireccion;
     private javax.swing.JTextField txtEfectivo;
