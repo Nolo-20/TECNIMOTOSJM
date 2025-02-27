@@ -14,12 +14,15 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.JTable;
@@ -192,44 +195,47 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 + "SELECT 'TOTAL' AS Metodo_Pago, COALESCE(SUM(v.Total), 0.0) AS Total "
                 + "FROM Venta v) AS Totales";
 
+        NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(new Locale("es", "CO")); // Moneda de Colombia
+
         try {
             ps = conexion.prepareStatement(sql);
             res = ps.executeQuery();
 
-            // Inicializar con 0.0
-            txtEfectivo.setText("0.0");
-            txtTarjeta.setText("0.0");
-            txtTransferencia.setText("0.0");
-            txtCuentaCorriente.setText("0.0");
-            txtDevoluciones.setText("0.0");
-            txtTotalCaja.setText("0.0");
+            // Inicializar con $0
+            txtEfectivo.setText("$0");
+            txtTarjeta.setText("$0");
+            txtTransferencia.setText("$0");
+            txtCuentaCorriente.setText("$0");
+            txtDevoluciones.setText("$0");
+            txtTotalCaja.setText("$0");
 
             while (res.next()) {
                 String metodo = res.getString("Metodo_Pago");
                 double total = res.getDouble("Total");
 
+                String totalFormateado = formatoMoneda.format(total); // Formatear en moneda
+
                 switch (metodo.toLowerCase()) {
                     case "efectivo":
-                        txtEfectivo.setText(String.format("%.2f", total));
+                        txtEfectivo.setText(totalFormateado);
                         break;
                     case "tarjeta":
-                        txtTarjeta.setText(String.format("%.2f", total));
+                        txtTarjeta.setText(totalFormateado);
                         break;
                     case "tranferencia":
-                        txtTransferencia.setText(String.format("%.2f", total));
+                        txtTransferencia.setText(totalFormateado);
                         break;
                     case "correspondencia":
-                        txtCuentaCorriente.setText(String.format("%.2f", total));
+                        txtCuentaCorriente.setText(totalFormateado);
                         break;
                     case "devoluciones":
-                        txtDevoluciones.setText(String.format("%.2f", total));
+                        txtDevoluciones.setText(totalFormateado);
                         break;
                     case "total":
-                        txtTotalCaja.setText(String.format("%.2f", total));
+                        txtTotalCaja.setText(totalFormateado);
                         break;
                 }
             }
-
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -431,15 +437,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         double total = 0.0;
 
         if (TablaVenta.getRowCount() == 0) { // Si no hay productos en la tabla
-            txtTotalV.setText("0.00"); // Asegurar que el total siempre sea cero
+            txtTotalV.setText("$0.00");
             return total;
         }
 
         for (int i = 0; i < TablaVenta.getRowCount(); i++) {
-            double precio = Double.parseDouble(TablaVenta.getValueAt(i, 3).toString()); // Columna 3 es el precio
-            int cantidad = Integer.parseInt(TablaVenta.getValueAt(i, 2).toString()); // Columna 2 es la cantidad
+            double precio = Double.parseDouble(TablaVenta.getValueAt(i, 3).toString()); // Columna 3 = Precio
+            int cantidad = Integer.parseInt(TablaVenta.getValueAt(i, 2).toString()); // Columna 2 = Cantidad
             total += precio * cantidad;
         }
+
+        // 🔹 No dividir por 100 aquí, el total ya está correcto
+        DecimalFormat df = new DecimalFormat("#,##0.00");
+        txtTotalV.setText("$" + df.format(total));
 
         return total;
     }
@@ -691,7 +701,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         int idCliente = Integer.parseInt(partesCliente[0]); // ID del cliente
         String nombreCliente = partesCliente[1]; // Nombre del cliente
 
-        // Obtener los productos de la tabla
+        // 🔹 Obtener los productos de la tabla
         List<String> productos = new ArrayList<>();
         DefaultTableModel modelo = (DefaultTableModel) TablaVenta.getModel();
 
@@ -707,6 +717,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 productos.add(producto);
             }
         }
+
+        // 🔹 Formatear el total antes de enviarlo a la ventana de pago
+        DecimalFormat df = new DecimalFormat("#,##0.00");
+        String totalFormateado = df.format(total);
 
         // 🔹 Pasamos 'this' para poder limpiar la tabla desde Interfaz_Pago
         Interfaz_Pago ventanaPago = new Interfaz_Pago(this, total, idCliente, nombreCliente, productos);
@@ -1227,6 +1241,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     //calcular el total en el inventario
     private void CalcularTotalInventario() {
         double total = 0;
+        NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(new Locale("es", "CO")); // Formato de moneda colombiana
 
         for (int i = 0; i < TablaInventario.getRowCount(); i++) {
             try {
@@ -1245,11 +1260,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         }
 
-        System.out.println("Total Inventario: " + total); // Verificar en la consola
+        System.out.println("Total Inventario: " + formatoMoneda.format(total)); // Verificar en la consola
 
         // Asegurar que txtIngresoTotal no es nulo antes de actualizarlo
         if (txtIngresoTotal != null) {
-            txtIngresoTotal.setText(String.format("%.2f", total));
+            txtIngresoTotal.setText(formatoMoneda.format(total)); // Mostrar en formato moneda
         } else {
             System.out.println("txtIngresoTotal es NULL. Verifica su inicialización.");
         }

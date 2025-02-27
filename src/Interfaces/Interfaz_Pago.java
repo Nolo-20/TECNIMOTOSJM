@@ -13,7 +13,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.HashMap;
+import java.util.Locale;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -61,41 +64,61 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     private void limpiarTablaVenta() {
         VentanaAlmacen.limpiarTablaVenta(); // Llama al método de limpieza
     }
-    
-    private void CalcularTotal(){
-    }
 
     private void calcularCambio() {
-        String textoPaga = txtPaga.getText().trim(); // Eliminar espacios en blanco
-        String metodoPago = boxMetodoPago.getSelectedItem().toString(); // Obtener método de pago seleccionado
+        String textoPaga = txtPaga.getText().trim();
+        String metodoPago = boxMetodoPago.getSelectedItem().toString();
 
-        // Si el método de pago NO es efectivo, no calcular el cambio
         if (!metodoPago.equalsIgnoreCase("Efectivo")) {
             txtCambio.setText("No aplica");
             return;
         }
 
         if (textoPaga.isEmpty() || !textoPaga.matches("\\d+")) {
-            txtCambio.setText("Monto insuficiente");
+            txtCambio.setText("Monto inválido");
             return;
         }
 
         try {
             double paga = Double.parseDouble(textoPaga);
 
-            // Reemplazar "Total: $" y convertir formato de coma a punto (para decimales)
-            String totalText = txtTotalPagar.getText().replace("$", "").replace(",", "").trim();
-            double totalVenta = Double.parseDouble(totalText);
+            // 🟢 Evitamos ejecución innecesaria
+            if (txtTotalPagar.getText().isEmpty()) {
+                txtCambio.setText("Error en total");
+                return;
+            }
+
+            // 🔹 Eliminamos TODO lo que no sea número, punto o coma
+            String totalText = txtTotalPagar.getText().replaceAll("[^\\d,\\.]", "");
+
+            // 🔹 Convertimos coma decimal a punto
+            if (totalText.contains(",")) {
+                totalText = totalText.replace(",", ".");
+            }
+
+            // 🟢 Evitamos múltiples puntos decimales
+            long countPoints = totalText.chars().filter(ch -> ch == '.').count();
+            if (countPoints > 1) {
+                throw new NumberFormatException("Formato inválido: múltiples puntos");
+            }
+
+            System.out.println("Texto original en txtTotalPagar: " + txtTotalPagar.getText());
+            System.out.println("Texto procesado en totalText: " + totalText);
+
+            // 🔹 Convertimos a número
+            double totalVenta = Double.parseDouble(totalText.trim());
 
             double cambio = paga - totalVenta;
 
             if (cambio < 0) {
                 txtCambio.setText("Monto insuficiente");
             } else {
-                txtCambio.setText(String.format("$%.2f", cambio));
+                DecimalFormat df = new DecimalFormat("#,##0.00");
+                txtCambio.setText("$" + df.format(cambio));
             }
         } catch (NumberFormatException e) {
-            txtCambio.setText("Monto insuficiente");
+            txtCambio.setText("Error en número");
+            e.printStackTrace();
         }
     }
 
@@ -122,51 +145,64 @@ public class Interfaz_Pago extends javax.swing.JFrame {
     }
 
     private void finalizarCompra() {
-        // Obtener el método de pago seleccionado
-        String metodoPago = boxMetodoPago.getSelectedItem().toString();
-        int idPago = metodosPagoMap.get(metodoPago);
+        try {
+            // Obtener el método de pago seleccionado
+            String metodoPago = boxMetodoPago.getSelectedItem().toString();
+            int idPago = metodosPagoMap.get(metodoPago);
 
-        // Obtener el total de la venta
-        double totalVenta = Double.parseDouble(txtTotalPagar.getText().replace("$", "").replace(",", ".").trim());
+            // Procesar el total a pagar eliminando caracteres innecesarios
+            String totalText = txtTotalPagar.getText().trim().replace("$", "").replace(".", "").replace(",", ".");
+            double totalVenta = Double.parseDouble(totalText);
 
-        // Obtener el cambio (si aplica)
-        double cambio = 0.0;
-        if (metodoPago.equalsIgnoreCase("Efectivo")) {
-            cambio = Double.parseDouble(txtCambio.getText().replace("$", "").replace(",", ".").trim());
-        }
+            // Inicializar el cambio en 0
+            double cambio = 0.0;
 
-        // Registrar la venta en la tabla Venta
-        int idVenta = registrarVenta(idCliente, idPago, totalVenta, cambio);
+            if (metodoPago.equalsIgnoreCase("Efectivo")) {
+                String paga = txtPaga.getText().trim();
+                if(paga.isEmpty()){
+                    JOptionPane.showMessageDialog(null, "Ingresa cuanto va a pagar el cliente", "error", JOptionPane.ERROR_MESSAGE);
+                }
+                // Procesar el cambio correctamente eliminando puntos de miles
+                String cambioText = txtCambio.getText().trim().replace("$", "").replace(".", "").replace(",", ".");
+                // Verificar que solo haya un punto decimal antes de convertir
+                if (cambioText.chars().filter(ch -> ch == '.').count() > 1) {
+                    throw new NumberFormatException("Formato inválido: múltiples puntos en cambio");
+                }
 
-        // Obtener el nombre de usuario (no el rol)
-        String usuarioActual = SessionManager.getNombreUsuarioActual();
-
-        if (idVenta > 0) {
-            // Registrar los productos vendidos en la tabla Factura
-            for (String producto : productos) {
-                String[] partes = producto.split(" - ");
-                String codigoProducto = partes[0];
-                int cantidad = Integer.parseInt(partes[2].replace("Cant: ", ""));
-                double precio = Double.parseDouble(partes[3].replace("$", ""));
-
-                registrarFactura(idVenta, codigoProducto, precio, cantidad);
+                cambio = Double.parseDouble(cambioText);
             }
 
-            // Actualizar el stock de los productos (si es necesario)
-            actualizarStock(productos);
+            // Registrar la venta
+            int idVenta = registrarVenta(idCliente, idPago, totalVenta, cambio);
+            String usuarioActual = SessionManager.getNombreUsuarioActual();
 
-            // Generar el recibo de la venta con el nombre de usuario correcto
-            Ticket ticket = new Ticket();
-            ticket.generarTicketPDF(idVenta, usuarioActual);
+            if (idVenta > 0) {
+                // Registrar productos en la factura
+                for (String producto : productos) {
+                    String[] partes = producto.split(" - ");
+                    String codigoProducto = partes[0];
+                    int cantidad = Integer.parseInt(partes[2].replace("Cant: ", ""));
+                    double precio = Double.parseDouble(partes[3].replace("$", "").replace(".", "").replace(",", "."));
 
-            // Limpiar la tabla después del pago
-            limpiarTablaVenta();
+                    registrarFactura(idVenta, codigoProducto, precio, cantidad);
+                }
 
-            // Mostrar mensaje de éxito
-            JOptionPane.showMessageDialog(null, "Venta registrada exitosamente. Recibo generado.");
-            this.dispose(); // Cerrar la ventana de pago
-        } else {
-            JOptionPane.showMessageDialog(null, "Error al registrar la venta.");
+                // Actualizar stock y generar recibo
+                actualizarStock(productos);
+                Ticket ticket = new Ticket();
+                ticket.generarTicketPDF(idVenta, usuarioActual);
+
+                // Limpiar tabla y cerrar ventana
+                limpiarTablaVenta();
+                JOptionPane.showMessageDialog(null, "Venta registrada exitosamente. Recibo generado.");
+                this.dispose();
+            } else {
+                JOptionPane.showMessageDialog(null, "Error al registrar la venta.");
+            }
+
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(null, "Error en el formato de los números: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -299,7 +335,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
         txtCambio.setBackground(new java.awt.Color(204, 204, 204));
         txtCambio.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         txtCambio.setBorder(null);
-        jPanel2.add(txtCambio, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 140, 140, 30));
+        jPanel2.add(txtCambio, new org.netbeans.lib.awtextra.AbsoluteConstraints(150, 140, 220, 30));
 
         txtTotalPagar.setEditable(false);
         txtTotalPagar.setBackground(new java.awt.Color(204, 204, 204));
@@ -310,7 +346,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
                 txtTotalPagarActionPerformed(evt);
             }
         });
-        jPanel2.add(txtTotalPagar, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 62, 140, 30));
+        jPanel2.add(txtTotalPagar, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 62, 150, 30));
 
         txtPaga.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         txtPaga.setBorder(null);
@@ -322,7 +358,7 @@ public class Interfaz_Pago extends javax.swing.JFrame {
                 txtPagaKeyReleased(evt);
             }
         });
-        jPanel2.add(txtPaga, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 100, 140, 30));
+        jPanel2.add(txtPaga, new org.netbeans.lib.awtextra.AbsoluteConstraints(220, 100, 150, 30));
 
         btnFinalizar.setFont(new java.awt.Font("Roboto Medium", 0, 12)); // NOI18N
         btnFinalizar.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/cheque.png"))); // NOI18N

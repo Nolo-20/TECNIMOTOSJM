@@ -30,6 +30,7 @@ import java.awt.Desktop;
 import java.io.*;
 import java.nio.file.Paths;
 import java.sql.*;
+import java.text.DecimalFormat;
 import javax.print.Doc;
 import javax.print.DocFlavor;
 import javax.print.DocPrintJob;
@@ -37,11 +38,11 @@ import javax.print.PrintService;
 import javax.print.PrintServiceLookup;
 import javax.print.SimpleDoc;
 import javax.print.attribute.HashPrintRequestAttributeSet;
+import org.apache.commons.io.IOUtils;
 
 public class Ticket {
 
-     private static final String RUTA_PDF = Paths.get(System.getProperty("user.home"), "Downloads").toString() + "\\";
-    private static final String LOGO_PATH = "src/imagenes/Tecnimotos-logo-grande.png";
+    private static final String RUTA_PDF = Paths.get(System.getProperty("user.home"), "Downloads").toString() + "\\";
     private static final String DB_URL = "jdbc:mysql://127.0.0.1/tecnimotosjm";
     private static final String DB_USER = "root";
     private static final String DB_PASSWORD = "";
@@ -78,9 +79,20 @@ public class Ticket {
 
     private void agregarLogo(Document documento) {
         try {
-            Image logo = Image.getInstance(LOGO_PATH);
-            logo.scaleToFit(260, 200);
+            InputStream is = getClass().getResourceAsStream("/Imagenes/Tecnimotos-logo-grande.png");
+            if (is == null) {
+                System.out.println("No se pudo cargar la imagen. Verifica la ruta.");
+                return;
+            }
+
+            byte[] bytes = IOUtils.toByteArray(is);
+            Image logo = Image.getInstance(bytes);
+
+            // Ajustar el tamaño del logo
+            logo.scaleToFit(200, 140); // Reducido para evitar que ocupe demasiado espacio
             logo.setAlignment(Element.ALIGN_CENTER);
+            logo.setSpacingAfter(2); // Reducimos el espacio después del logo
+
             documento.add(logo);
         } catch (Exception e) {
             e.printStackTrace();
@@ -91,12 +103,16 @@ public class Ticket {
         Paragraph empresa = new Paragraph(
                 "TECNIMOTOS JM\nNIT: 79828023-1\nNO RESPONSABLE DE IVA\nDG 58 SUR # 29A 22\nCEL: 3209160538\n",
                 new Font(Font.FontFamily.HELVETICA, 8, Font.BOLD));
+
         empresa.setAlignment(Element.ALIGN_CENTER);
+        empresa.setSpacingBefore(0);
+        empresa.setSpacingAfter(5);
+
         documento.add(empresa);
     }
 
     private void agregarDatosFactura(Document documento, Connection con, int idVenta, String usuarioActual) throws SQLException, DocumentException {
-        String sql = "SELECT v.Fecha_Venta, CONCAT(c.Nombre, ' ', c.Apellido), c.Telefono, c.Cedula, c.Direccion, v.Total "
+        String sql = "SELECT v.ID, v.Fecha_Venta, CONCAT(c.Nombre, ' ', c.Apellido), c.Telefono, c.Cedula, c.Direccion, v.Total "
                 + "FROM Venta v "
                 + "JOIN Cliente c ON v.ID_Cliente = c.ID "
                 + "WHERE v.ID = ?";
@@ -109,21 +125,31 @@ public class Ticket {
                     tablaDatos.setWidthPercentage(100);
                     tablaDatos.setWidths(new float[]{40, 60});
 
-                    tablaDatos.addCell(getCell("Fecha:", Font.BOLD, Element.ALIGN_LEFT));
-                    tablaDatos.addCell(getCell(rs.getString(1), Font.NORMAL, Element.ALIGN_RIGHT));
+                    // Número de Factura
+                    tablaDatos.addCell(getCell("N° Factura:", Font.BOLD, Element.ALIGN_LEFT));
+                    tablaDatos.addCell(getCell(String.valueOf(rs.getInt(1)), Font.NORMAL, Element.ALIGN_RIGHT));
 
-                    tablaDatos.addCell(getCell("Cliente:", Font.BOLD, Element.ALIGN_LEFT));
+                    // Fecha de Venta
+                    tablaDatos.addCell(getCell("Fecha:", Font.BOLD, Element.ALIGN_LEFT));
                     tablaDatos.addCell(getCell(rs.getString(2), Font.NORMAL, Element.ALIGN_RIGHT));
 
-                    tablaDatos.addCell(getCell("Celular:", Font.BOLD, Element.ALIGN_LEFT));
+                    // Cliente
+                    tablaDatos.addCell(getCell("Cliente:", Font.BOLD, Element.ALIGN_LEFT));
                     tablaDatos.addCell(getCell(rs.getString(3), Font.NORMAL, Element.ALIGN_RIGHT));
 
-                    tablaDatos.addCell(getCell("CC/NIT:", Font.BOLD, Element.ALIGN_LEFT));
+                    // Teléfono
+                    tablaDatos.addCell(getCell("Celular:", Font.BOLD, Element.ALIGN_LEFT));
                     tablaDatos.addCell(getCell(rs.getString(4), Font.NORMAL, Element.ALIGN_RIGHT));
 
-                    tablaDatos.addCell(getCell("Dirección:", Font.BOLD, Element.ALIGN_LEFT));
+                    // Cédula / NIT
+                    tablaDatos.addCell(getCell("CC/NIT:", Font.BOLD, Element.ALIGN_LEFT));
                     tablaDatos.addCell(getCell(rs.getString(5), Font.NORMAL, Element.ALIGN_RIGHT));
 
+                    // Dirección
+                    tablaDatos.addCell(getCell("Dirección:", Font.BOLD, Element.ALIGN_LEFT));
+                    tablaDatos.addCell(getCell(rs.getString(6), Font.NORMAL, Element.ALIGN_RIGHT));
+
+                    // Vendedor
                     tablaDatos.addCell(getCell("Vendedor:", Font.BOLD, Element.ALIGN_LEFT));
                     tablaDatos.addCell(getCell(usuarioActual, Font.NORMAL, Element.ALIGN_RIGHT));
 
@@ -133,10 +159,22 @@ public class Ticket {
         }
     }
 
+    private String formatearMoneda(double valor) {
+        // Si el número no tiene decimales, mostrarlo sin ".00"
+        if (valor == (long) valor) {
+            return "$ " + String.format("%,d", (long) valor); // Sin decimales
+        } else {
+            DecimalFormat formato = new DecimalFormat("$ #,##0.00"); // Con decimales si los hay
+            return formato.format(valor);
+        }
+    }
+
     private void agregarDetalleProductos(Document documento, Connection con, int idVenta) throws SQLException, DocumentException {
         PdfPTable tabla = new PdfPTable(4);
         tabla.setWidthPercentage(100);
-        tabla.setWidths(new float[]{50, 15, 20, 25});
+
+        // Ajustar mejor los anchos de las columnas (dar más espacio a UNIT y TOTAL)
+        tabla.setWidths(new float[]{50, 10, 20, 20});
 
         tabla.addCell(getCell("DETALLE", Font.BOLD, Element.ALIGN_LEFT));
         tabla.addCell(getCell("CANT", Font.BOLD, Element.ALIGN_CENTER));
@@ -154,8 +192,8 @@ public class Ticket {
                 while (rs.next()) {
                     tabla.addCell(getCell(rs.getString(1), Font.NORMAL, Element.ALIGN_LEFT));
                     tabla.addCell(getCell(rs.getString(2), Font.NORMAL, Element.ALIGN_CENTER));
-                    tabla.addCell(getCell("$ " + String.format("%.2f", rs.getDouble(3)), Font.NORMAL, Element.ALIGN_RIGHT));
-                    tabla.addCell(getCell("$ " + String.format("%.2f", rs.getDouble(4)), Font.NORMAL, Element.ALIGN_RIGHT));
+                    tabla.addCell(getCell(formatearMoneda(rs.getDouble(3)), Font.NORMAL, Element.ALIGN_RIGHT)); // Formateado
+                    tabla.addCell(getCell(formatearMoneda(rs.getDouble(4)), Font.NORMAL, Element.ALIGN_RIGHT)); // Formateado
                 }
             }
         }
@@ -165,8 +203,8 @@ public class Ticket {
     }
 
     private void agregarTotales(Document documento, Connection con, int idVenta) throws SQLException, DocumentException {
-        // Consulta para obtener el total y el método de pago
-        String sql = "SELECT v.Total, m.Pago FROM Venta v "
+        String sql = "SELECT v.Total, m.Pago, COALESCE(v.Cambio, 0) AS Cambio, (v.Total + COALESCE(v.Cambio, 0)) AS Pago_Cliente "
+                + "FROM Venta v "
                 + "JOIN Metodo_Pago m ON v.ID_Pago = m.ID "
                 + "WHERE v.ID = ?";
 
@@ -174,14 +212,33 @@ public class Ticket {
             ps.setInt(1, idVenta);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
-                    double total = rs.getDouble(1);
-                    String metodoPago = rs.getString(2); // Obtener el nombre del método de pago
+                    double total = rs.getDouble("Total");
+                    String metodoPago = rs.getString("Pago"); // Método de pago
+                    double pagoCliente = rs.getDouble("Pago_Cliente"); // Monto pagado por el cliente
+                    double cambio = rs.getDouble("Cambio"); // Cambio (si aplica)
 
-                    Paragraph totales = new Paragraph(
-                            "TOTAL: $" + total + "\nForma de Pago: " + metodoPago,
-                            new Font(Font.FontFamily.HELVETICA, 10, Font.BOLD));
-                    totales.setAlignment(Element.ALIGN_RIGHT);
-                    documento.add(totales);
+                    PdfPTable tablaTotales = new PdfPTable(2);
+                    tablaTotales.setWidthPercentage(100);
+                    tablaTotales.setWidths(new float[]{50, 50});
+
+                    // Total de la compra
+                    tablaTotales.addCell(getCell("TOTAL:", Font.BOLD, Element.ALIGN_LEFT));
+                    tablaTotales.addCell(getCell(formatearMoneda(total), Font.BOLD, Element.ALIGN_RIGHT));
+
+                    // Método de pago
+                    tablaTotales.addCell(getCell("MÉTODO DE PAGO:", Font.BOLD, Element.ALIGN_LEFT));
+                    tablaTotales.addCell(getCell(metodoPago, Font.NORMAL, Element.ALIGN_RIGHT));
+
+                    // Si el método de pago es "Efectivo", mostrar PAGO CON y CAMBIO
+                    if ("Efectivo".equalsIgnoreCase(metodoPago)) {
+                        tablaTotales.addCell(getCell("PAGO CON:", Font.BOLD, Element.ALIGN_LEFT));
+                        tablaTotales.addCell(getCell(formatearMoneda(pagoCliente), Font.NORMAL, Element.ALIGN_RIGHT));
+
+                        tablaTotales.addCell(getCell("CAMBIO:", Font.BOLD, Element.ALIGN_LEFT));
+                        tablaTotales.addCell(getCell(formatearMoneda(cambio), Font.BOLD, Element.ALIGN_RIGHT));
+                    }
+
+                    documento.add(tablaTotales);
                 }
             }
         }
