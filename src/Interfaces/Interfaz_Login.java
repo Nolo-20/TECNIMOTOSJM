@@ -197,7 +197,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
         jPanel3.add(jLabel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 430, 330));
 
         jLabel2.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel2.setText("V1.0");
+        jLabel2.setText("V1.2");
         jPanel3.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 480, -1, -1));
 
         jLabel4.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
