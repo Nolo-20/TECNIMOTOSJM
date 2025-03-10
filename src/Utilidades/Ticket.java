@@ -4,6 +4,7 @@
  */
 package Utilidades;
 
+import Config.Conexion;
 import com.itextpdf.text.Document;
 import com.itextpdf.text.Element;
 import com.itextpdf.text.Font;
@@ -41,16 +42,18 @@ import javax.print.attribute.HashPrintRequestAttributeSet;
 import org.apache.commons.io.IOUtils;
 
 public class Ticket {
+    
+    Conexion con = new Conexion();
+    Connection conexion = (Connection) con.conectar();
+    PreparedStatement ps;
+    ResultSet rs;
 
     private static final String RUTA_PDF = Paths.get(System.getProperty("user.home"), "Downloads").toString() + "\\";
-    private static final String DB_URL = "jdbc:mysql://127.0.0.1/tecnimotosjm";
-    private static final String DB_USER = "root";
-    private static final String DB_PASSWORD = "";
 
     public void generarTicketPDF(int idVenta, String usuarioActual) {
         String rutaPDF = RUTA_PDF + "Ticket_" + idVenta + ".pdf";
 
-        try (Connection con = getConnection()) {
+        try {
             Document documento = new Document(new Rectangle(226, 800));
             PdfWriter.getInstance(documento, new FileOutputStream(rutaPDF));
             documento.open();
@@ -58,11 +61,11 @@ public class Ticket {
             agregarLogo(documento);
             agregarDatosEmpresa(documento);
             documento.add(new Paragraph("--------------------------------------------------\n", new Font(Font.FontFamily.HELVETICA, 8)));
-            agregarDatosFactura(documento, con, idVenta, usuarioActual);
+            agregarDatosFactura(documento, conexion, idVenta, usuarioActual);
             documento.add(new Paragraph("--------------------------------------------------\n", new Font(Font.FontFamily.HELVETICA, 8)));
-            agregarDetalleProductos(documento, con, idVenta);
+            agregarDetalleProductos(documento, conexion, idVenta);
             documento.add(new Paragraph("--------------------------------------------------\n", new Font(Font.FontFamily.HELVETICA, 8)));
-            agregarTotales(documento, con, idVenta);
+            agregarTotales(documento, conexion, idVenta);
             documento.add(new Paragraph("--------------------------------------------------\nGracias por su compra\n", new Font(Font.FontFamily.HELVETICA, 8, Font.BOLDITALIC)));
 
             documento.close();
@@ -71,10 +74,6 @@ public class Ticket {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
     }
 
     private void agregarLogo(Document documento) {
@@ -117,7 +116,9 @@ public class Ticket {
                 + "JOIN Cliente c ON v.ID_Cliente = c.ID "
                 + "WHERE v.ID = ?";
 
-        try (PreparedStatement ps = con.prepareStatement(sql)) {
+        try {
+            ps = conexion.prepareStatement(sql);
+            
             ps.setInt(1, idVenta);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -156,6 +157,8 @@ public class Ticket {
                     documento.add(tablaDatos);
                 }
             }
+        }catch(SQLException e){
+            System.out.println(e.getMessage());
         }
     }
 
@@ -186,7 +189,9 @@ public class Ticket {
                 + "JOIN Producto p ON f.ID_Producto = p.Codigo "
                 + "WHERE f.ID_Venta = ?";
 
-        try (PreparedStatement ps = con.prepareStatement(sql)) {
+        try{
+            ps = conexion.prepareStatement(sql);
+            
             ps.setInt(1, idVenta);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
@@ -196,6 +201,8 @@ public class Ticket {
                     tabla.addCell(getCell(formatearMoneda(rs.getDouble(4)), Font.NORMAL, Element.ALIGN_RIGHT)); // Formateado
                 }
             }
+        }catch(SQLException e){
+            System.out.println(e.getMessage());
         }
 
         documento.add(tabla);
@@ -208,7 +215,9 @@ public class Ticket {
                 + "JOIN Metodo_Pago m ON v.ID_Pago = m.ID "
                 + "WHERE v.ID = ?";
 
-        try (PreparedStatement ps = con.prepareStatement(sql)) {
+        try {
+            ps = conexion.prepareStatement(sql);
+            
             ps.setInt(1, idVenta);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
@@ -241,6 +250,8 @@ public class Ticket {
                     documento.add(tablaTotales);
                 }
             }
+        }catch(SQLException e){
+            System.out.println(e.getMessage());
         }
     }
 

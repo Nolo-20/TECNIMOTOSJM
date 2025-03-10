@@ -5,9 +5,12 @@
 package Interfaces;
 
 import Config.Conexion;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import org.mindrot.jbcrypt.BCrypt;
 
@@ -26,6 +29,15 @@ public class Interfaz_Registro extends javax.swing.JFrame {
     
     public Interfaz_Registro() {
         initComponents();
+        this.setDefaultCloseOperation(login.DO_NOTHING_ON_CLOSE);
+        this.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                login.setVisible(true);
+                login.setLocationRelativeTo(null);
+                dispose();
+            }
+        });
     }
     
     private void registrarUsuario() {
@@ -81,6 +93,8 @@ public class Interfaz_Registro extends javax.swing.JFrame {
         }
         return false;
     }
+    
+    
 
     /**
      * This method is called from within the constructor to initialize the form.

@@ -16,10 +16,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -181,64 +183,109 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
     //REPORTE DE CAJA
     public void ReporteCaja() {
+        SimpleDateFormat formato = new SimpleDateFormat("yyyy-MM-dd");
+
+        // Obtener la fecha actual y la fecha de hace 15 días
+        Calendar calendar = Calendar.getInstance();
+        String fechaHasta = formato.format(calendar.getTime()); // Fecha actual
+
+        calendar.add(Calendar.DAY_OF_MONTH, -15); // Restar 15 días
+        String fechaDesde = formato.format(calendar.getTime());
+
+        // Si el usuario selecciona fechas, se actualizan los valores
+        if (dateDesde.getDate() != null) {
+            fechaDesde = formato.format(dateDesde.getDate());
+        }
+        if (dateHasta.getDate() != null) {
+            fechaHasta = formato.format(dateHasta.getDate());
+        }
+
+        // Mostrar fechas en consola para depuración
+        System.out.println("Fecha Desde: " + fechaDesde);
+        System.out.println("Fecha Hasta: " + fechaHasta);
+
         String sql = "SELECT Metodo_Pago, Total FROM ("
                 + "SELECT mp.Pago AS Metodo_Pago, COALESCE(SUM(v.Total), 0.0) AS Total "
                 + "FROM Metodo_Pago mp "
                 + "LEFT JOIN Venta v ON mp.ID = v.ID_Pago "
+                + "WHERE DATE(v.Fecha_Venta) BETWEEN ? AND ? "
                 + "GROUP BY mp.Pago "
                 + "UNION ALL "
                 + "SELECT 'DEVOLUCIONES' AS Metodo_Pago, COALESCE(SUM(v.Cambio), 0.0) AS Total "
                 + "FROM Venta v "
                 + "JOIN Metodo_Pago mp ON v.ID_Pago = mp.ID "
-                + "WHERE mp.Pago = 'EFECTIVO' "
+                + "WHERE mp.Pago = 'EFECTIVO' AND DATE(v.Fecha_Venta) BETWEEN ? AND ? "
                 + "UNION ALL "
                 + "SELECT 'TOTAL' AS Metodo_Pago, COALESCE(SUM(v.Total), 0.0) AS Total "
-                + "FROM Venta v) AS Totales";
+                + "FROM Venta v "
+                + "WHERE DATE(v.Fecha_Venta) BETWEEN ? AND ?) AS Totales";
 
         NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(new Locale("es", "CO")); // Moneda de Colombia
 
-        try {
-            ps = conexion.prepareStatement(sql);
-            res = ps.executeQuery();
+        try (PreparedStatement ps = conexion.prepareStatement(sql)) {
+            ps.setString(1, fechaDesde);
+            ps.setString(2, fechaHasta);
+            ps.setString(3, fechaDesde);
+            ps.setString(4, fechaHasta);
+            ps.setString(5, fechaDesde);
+            ps.setString(6, fechaHasta);
 
-            // Inicializar con $0
-            txtEfectivo.setText("$0");
-            txtTarjeta.setText("$0");
-            txtTransferencia.setText("$0");
-            txtCuentaCorriente.setText("$0");
-            txtDevoluciones.setText("$0");
-            txtTotalCaja.setText("$0");
+            try (ResultSet res = ps.executeQuery()) {
+                // Inicializar con $0
+                txtEfectivo.setText("$0");
+                txtTarjeta.setText("$0");
+                txtTransferencia.setText("$0");
+                txtCuentaCorriente.setText("$0");
+                txtDevoluciones.setText("$0");
+                txtTotalCaja.setText("$0");
 
-            while (res.next()) {
-                String metodo = res.getString("Metodo_Pago");
-                double total = res.getDouble("Total");
+                // Verificar si hay resultados
+                if (!res.isBeforeFirst()) {
+                    System.out.println("No hay ventas en el rango de fechas seleccionado.");
+                }
 
-                String totalFormateado = formatoMoneda.format(total); // Formatear en moneda
+                while (res.next()) {
+                    String metodo = res.getString("Metodo_Pago").trim().toLowerCase();
+                    double total = res.getDouble("Total");
+                    String totalFormateado = formatoMoneda.format(total); // Formatear en moneda
 
-                switch (metodo.toLowerCase()) {
-                    case "efectivo":
-                        txtEfectivo.setText(totalFormateado);
-                        break;
-                    case "tarjeta":
-                        txtTarjeta.setText(totalFormateado);
-                        break;
-                    case "tranferencia":
-                        txtTransferencia.setText(totalFormateado);
-                        break;
-                    case "correspondencia":
-                        txtCuentaCorriente.setText(totalFormateado);
-                        break;
-                    case "devoluciones":
-                        txtDevoluciones.setText(totalFormateado);
-                        break;
-                    case "total":
-                        txtTotalCaja.setText(totalFormateado);
-                        break;
+                    switch (metodo) {
+                        case "efectivo":
+                            txtEfectivo.setText(totalFormateado);
+                            break;
+                        case "tarjeta":
+                            txtTarjeta.setText(totalFormateado);
+                            break;
+                        case "transferencia":
+                            txtTransferencia.setText(totalFormateado);
+                            break;
+                        case "cuenta corriente":
+                            txtCuentaCorriente.setText(totalFormateado);
+                            break;
+                        case "devoluciones":
+                            txtDevoluciones.setText(totalFormateado);
+                            break;
+                        case "total":
+                            txtTotalCaja.setText(totalFormateado);
+                            break;
+                        default:
+                            System.out.println("Método de pago desconocido: " + metodo);
+                            break;
+                    }
                 }
             }
         } catch (SQLException e) {
             e.printStackTrace();
+            JOptionPane.showMessageDialog(null, "Error en la consulta: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
+
+        // Forzar actualización de la UI
+        txtEfectivo.repaint();
+        txtTarjeta.repaint();
+        txtTransferencia.repaint();
+        txtCuentaCorriente.repaint();
+        txtDevoluciones.repaint();
+        txtTotalCaja.repaint();
     }
 
     public void exportarAExcel() {
@@ -326,9 +373,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         if (!codigo.isEmpty()) {
             try {
                 String sql = "SELECT Descripcion, Precio, Stock FROM producto WHERE Codigo = ?";
-                PreparedStatement pst = conexion.prepareStatement(sql);
-                pst.setString(1, codigo);
-                ResultSet rs = pst.executeQuery();
+                ps = conexion.prepareStatement(sql);
+                ps.setString(1, codigo);
+                ResultSet rs = ps.executeQuery();
 
                 if (rs.next()) {
                     int stock = rs.getInt("Stock"); // Obtener el stock del producto
@@ -529,7 +576,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         modelo.setRowCount(0); // Limpiar tabla antes de cargar datos
 
         try {
-            String sql = "SELECT Cedula, Nombre, Apellido, Telefono, Direccion FROM Cliente";
+            String sql = "SELECT Cedula, Nombre, Apellido, Telefono, Direccion FROM Cliente WHERE NOT id = 1";
             ps = conexion.prepareStatement(sql);
             res = ps.executeQuery();
 
@@ -956,8 +1003,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
     //historial venta
     public void historialVenta() {
-        String fechaInicio = txtFechaInicial.getText().trim();
-        String fechaFin = txtFechaFin.getText().trim();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        // Obtener fechas de los JDateChooser
+        String fechaInicio = (dateChooserInicio.getDate() != null) ? sdf.format(dateChooserInicio.getDate()) : "";
+        String fechaFin = (dateChooserFin.getDate() != null) ? sdf.format(dateChooserFin.getDate()) : "";
 
         DefaultTableModel modelo = (DefaultTableModel) TablaVentaHistorial.getModel();
         modelo.setColumnIdentifiers(new String[]{"Fecha de Venta", "Cliente", "Producto", "Precio uni", "Cantidad", "Total"});
@@ -979,7 +1029,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         try {
             ps = conexion.prepareStatement(sql);
-            // Si hay fechas ingresadas, agregarlas como parámetros
             if (!fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
                 ps.setString(1, fechaInicio);
                 ps.setString(2, fechaFin);
@@ -992,7 +1041,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                     rs.getString("Fecha_Venta"),
                     rs.getString("Cliente"),
                     rs.getString("Producto"),
-                    rs.getDouble("Precio"), // Precio unitario del producto
+                    rs.getDouble("Precio"),
                     rs.getInt("Cantidad"),
                     rs.getDouble("Total")
                 };
@@ -1004,19 +1053,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     public void buscarPorFecha() {
-        String fechaInicio = convertirFecha(txtFechaInicial.getText().trim());
-        String fechaFin = convertirFecha(txtFechaFin.getText().trim());
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd"); // Formato SQL
 
-        if (fechaInicio == null || fechaFin == null) {
-            return; // Si la conversión falla, salir del método
-        }
+        // Obtener fechas de los JDateChooser
+        String fechaInicio = (dateChooserInicio.getDate() != null) ? sdf.format(dateChooserInicio.getDate()) : "";
+        String fechaFin = (dateChooserFin.getDate() != null) ? sdf.format(dateChooserFin.getDate()) : "";
 
         if (fechaInicio.isEmpty() || fechaFin.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "Ingrese los Campos");
+            JOptionPane.showMessageDialog(null, "Ingrese ambas fechas");
+            return;
         }
 
         DefaultTableModel modelo = (DefaultTableModel) TablaVentaHistorial.getModel();
-        modelo.setRowCount(0); // Limpiar la tabla antes de agregar nuevos datos
+        modelo.setRowCount(0); // Limpiar tabla
 
         String sql = "SELECT v.Fecha_Venta, c.Nombre AS Cliente, p.Descripcion AS Producto, f.Precio, f.Cantidad, (f.Precio * f.Cantidad) AS Total "
                 + "FROM Venta v "
@@ -1067,8 +1116,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
     //Historial Compra
     public void historialCompra() {
-        String fechaInicio = txtFechaInicial2.getText().trim();
-        String fechaFin = txtFechaFin2.getText().trim();
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        // Obtener fechas de los JDateChooser
+        String fechaInicio = (dateChooserInicio2.getDate() != null) ? sdf.format(dateChooserInicio2.getDate()) : "";
+        String fechaFin = (dateChooserFin2.getDate() != null) ? sdf.format(dateChooserFin2.getDate()) : "";
 
         DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
         modelo.setColumnIdentifiers(new String[]{"Fecha de Compra", "Proveedor", "Producto", "Precio Costo", "Cantidad", "Total"});
@@ -1193,15 +1245,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
 // Función para buscar compras por fecha
     public void buscarCompraPorFecha() {
-        String fechaInicio = convertirFecha(txtFechaInicial2.getText().trim());
-        String fechaFin = convertirFecha(txtFechaFin2.getText().trim());
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd"); // Formato SQL
 
-        if (fechaInicio == null || fechaFin == null) {
-            return; // Si la conversión falla, salir del método
-        }
+        // Obtener fechas de los JDateChooser
+        String fechaInicio = (dateChooserInicio2.getDate() != null) ? sdf.format(dateChooserInicio2.getDate()) : "";
+        String fechaFin = (dateChooserFin2.getDate() != null) ? sdf.format(dateChooserFin2.getDate()) : "";
 
         if (fechaInicio.isEmpty() || fechaFin.isEmpty()) {
-            JOptionPane.showMessageDialog(null, "Ingrese los Campos");
+            JOptionPane.showMessageDialog(null, "Ingrese ambas fechas");
+            return;
         }
 
         DefaultTableModel modelo = (DefaultTableModel) TablaHistorialCompra.getModel();
@@ -1354,7 +1406,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jTabbedPane1 = new javax.swing.JTabbedPane();
         ReporteCaja = new javax.swing.JPanel();
         jPanel10 = new javax.swing.JPanel();
-        jLabel4 = new javax.swing.JLabel();
         jLabel5 = new javax.swing.JLabel();
         txtTotalCaja = new javax.swing.JTextField();
         jLabel6 = new javax.swing.JLabel();
@@ -1367,6 +1418,12 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtCuentaCorriente = new javax.swing.JTextField();
         jLabel10 = new javax.swing.JLabel();
         txtDevoluciones = new javax.swing.JTextField();
+        jLabel24 = new javax.swing.JLabel();
+        jPanel3 = new javax.swing.JPanel();
+        dateHasta = new com.toedter.calendar.JDateChooser();
+        jLabel49 = new javax.swing.JLabel();
+        jLabel4 = new javax.swing.JLabel();
+        dateDesde = new com.toedter.calendar.JDateChooser();
         Inventario = new javax.swing.JPanel();
         jPanel5 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
@@ -1455,27 +1512,23 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         TablaVentaHistorial = new javax.swing.JTable();
         jLabel33 = new javax.swing.JLabel();
         btnExportarVenta = new javax.swing.JButton();
-        txtFechaFin = new javax.swing.JTextField();
-        txtFechaInicial = new javax.swing.JTextField();
-        jLabel42 = new javax.swing.JLabel();
         btnBuscarFechaVenta = new javax.swing.JButton();
         jLabel43 = new javax.swing.JLabel();
-        jLabel44 = new javax.swing.JLabel();
         btnActualizarHistorialVenta = new javax.swing.JButton();
+        dateChooserInicio = new com.toedter.calendar.JDateChooser();
+        dateChooserFin = new com.toedter.calendar.JDateChooser();
         HistorialCompra = new javax.swing.JPanel();
         jPanel2 = new javax.swing.JPanel();
         jLabel35 = new javax.swing.JLabel();
         jScrollPane6 = new javax.swing.JScrollPane();
         TablaHistorialCompra = new javax.swing.JTable();
         jLabel45 = new javax.swing.JLabel();
-        txtFechaInicial2 = new javax.swing.JTextField();
-        jLabel46 = new javax.swing.JLabel();
         jLabel47 = new javax.swing.JLabel();
-        txtFechaFin2 = new javax.swing.JTextField();
-        jLabel48 = new javax.swing.JLabel();
         btnBuscarFechaCompra = new javax.swing.JButton();
         btnExportarCompra = new javax.swing.JButton();
         btnActualizarHistorialCompra = new javax.swing.JButton();
+        dateChooserFin2 = new com.toedter.calendar.JDateChooser();
+        dateChooserInicio2 = new com.toedter.calendar.JDateChooser();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
 
@@ -1653,76 +1706,130 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jPanel10.setBackground(new java.awt.Color(50, 101, 255));
         jPanel10.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
-        jLabel4.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
-        jLabel4.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel4.setText("REPORTE DE CAJA");
-        jPanel10.add(jLabel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(370, 30, 310, -1));
-
         jLabel5.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel5.setForeground(new java.awt.Color(255, 51, 51));
         jLabel5.setText("TOTAL");
-        jPanel10.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 430, -1, -1));
+        jPanel10.add(jLabel5, new org.netbeans.lib.awtextra.AbsoluteConstraints(70, 430, -1, -1));
 
         txtTotalCaja.setEditable(false);
         txtTotalCaja.setBackground(new java.awt.Color(50, 101, 255));
         txtTotalCaja.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
         txtTotalCaja.setBorder(null);
-        jPanel10.add(txtTotalCaja, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 430, 220, 30));
+        jPanel10.add(txtTotalCaja, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 430, 220, 30));
 
         jLabel6.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel6.setForeground(new java.awt.Color(255, 255, 255));
         jLabel6.setText("EFECTIVO");
-        jPanel10.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 130, -1, -1));
+        jPanel10.add(jLabel6, new org.netbeans.lib.awtextra.AbsoluteConstraints(70, 130, -1, -1));
 
         jLabel7.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel7.setForeground(new java.awt.Color(255, 255, 255));
         jLabel7.setText("TARJETA");
-        jPanel10.add(jLabel7, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 190, -1, -1));
+        jPanel10.add(jLabel7, new org.netbeans.lib.awtextra.AbsoluteConstraints(70, 190, -1, -1));
 
         jLabel8.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel8.setForeground(new java.awt.Color(255, 255, 255));
         jLabel8.setText("TRANSFERENCIA");
-        jPanel10.add(jLabel8, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 250, -1, -1));
+        jPanel10.add(jLabel8, new org.netbeans.lib.awtextra.AbsoluteConstraints(70, 250, -1, -1));
 
         txtEfectivo.setEditable(false);
         txtEfectivo.setBackground(new java.awt.Color(50, 101, 255));
         txtEfectivo.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
         txtEfectivo.setBorder(null);
-        jPanel10.add(txtEfectivo, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 130, 220, 30));
+        jPanel10.add(txtEfectivo, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 130, 220, 30));
 
         txtTarjeta.setEditable(false);
         txtTarjeta.setBackground(new java.awt.Color(50, 101, 255));
         txtTarjeta.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
         txtTarjeta.setBorder(null);
-        jPanel10.add(txtTarjeta, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 190, 220, 30));
+        jPanel10.add(txtTarjeta, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 190, 220, 30));
 
         txtTransferencia.setEditable(false);
         txtTransferencia.setBackground(new java.awt.Color(50, 101, 255));
         txtTransferencia.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
         txtTransferencia.setBorder(null);
-        jPanel10.add(txtTransferencia, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 250, 220, 30));
+        jPanel10.add(txtTransferencia, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 250, 220, 30));
 
         jLabel9.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel9.setForeground(new java.awt.Color(255, 255, 255));
         jLabel9.setText("CUENTA CORRIENTE");
-        jPanel10.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 310, -1, -1));
+        jPanel10.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(70, 310, -1, -1));
 
         txtCuentaCorriente.setEditable(false);
         txtCuentaCorriente.setBackground(new java.awt.Color(50, 101, 255));
         txtCuentaCorriente.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
         txtCuentaCorriente.setBorder(null);
-        jPanel10.add(txtCuentaCorriente, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 310, 220, 30));
+        jPanel10.add(txtCuentaCorriente, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 310, 220, 30));
 
         jLabel10.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel10.setForeground(new java.awt.Color(51, 255, 51));
         jLabel10.setText("DEVOLUCIONES");
-        jPanel10.add(jLabel10, new org.netbeans.lib.awtextra.AbsoluteConstraints(240, 370, -1, -1));
+        jPanel10.add(jLabel10, new org.netbeans.lib.awtextra.AbsoluteConstraints(70, 370, -1, -1));
 
         txtDevoluciones.setEditable(false);
         txtDevoluciones.setBackground(new java.awt.Color(50, 101, 255));
         txtDevoluciones.setFont(new java.awt.Font("Roboto Black", 0, 24)); // NOI18N
         txtDevoluciones.setBorder(null);
-        jPanel10.add(txtDevoluciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(550, 370, 220, 30));
+        jPanel10.add(txtDevoluciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 370, 220, 30));
+
+        jLabel24.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
+        jLabel24.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel24.setText("REPORTE DE CAJA");
+        jPanel10.add(jLabel24, new org.netbeans.lib.awtextra.AbsoluteConstraints(360, 30, 320, -1));
+
+        jPanel3.setBackground(new java.awt.Color(204, 204, 204));
+        jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder("Fecha"));
+
+        dateHasta.addPropertyChangeListener(new java.beans.PropertyChangeListener() {
+            public void propertyChange(java.beans.PropertyChangeEvent evt) {
+                dateHastaPropertyChange(evt);
+            }
+        });
+
+        jLabel49.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
+        jLabel49.setText("DESDE");
+
+        jLabel4.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
+        jLabel4.setText("HASTA");
+
+        dateDesde.addPropertyChangeListener(new java.beans.PropertyChangeListener() {
+            public void propertyChange(java.beans.PropertyChangeEvent evt) {
+                dateDesdePropertyChange(evt);
+            }
+        });
+
+        javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
+        jPanel3.setLayout(jPanel3Layout);
+        jPanel3Layout.setHorizontalGroup(
+            jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel3Layout.createSequentialGroup()
+                .addContainerGap(62, Short.MAX_VALUE)
+                .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(dateDesde, javax.swing.GroupLayout.PREFERRED_SIZE, 260, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(dateHasta, javax.swing.GroupLayout.PREFERRED_SIZE, 260, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGap(65, 65, 65)
+                        .addComponent(jLabel4, javax.swing.GroupLayout.PREFERRED_SIZE, 130, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGroup(jPanel3Layout.createSequentialGroup()
+                        .addGap(59, 59, 59)
+                        .addComponent(jLabel49, javax.swing.GroupLayout.PREFERRED_SIZE, 130, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                .addGap(48, 48, 48))
+        );
+        jPanel3Layout.setVerticalGroup(
+            jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(jPanel3Layout.createSequentialGroup()
+                .addGap(49, 49, 49)
+                .addComponent(jLabel49)
+                .addGap(18, 18, 18)
+                .addComponent(dateDesde, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(18, 18, 18)
+                .addComponent(jLabel4)
+                .addGap(18, 18, 18)
+                .addComponent(dateHasta, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(78, Short.MAX_VALUE))
+        );
+
+        jPanel10.add(jPanel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(660, 110, 380, 350));
 
         javax.swing.GroupLayout ReporteCajaLayout = new javax.swing.GroupLayout(ReporteCaja);
         ReporteCaja.setLayout(ReporteCajaLayout);
@@ -1765,7 +1872,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane1.setViewportView(TablaInventario);
 
-        jPanel5.add(jScrollPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 160, 1040, 420));
+        jPanel5.add(jScrollPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 160, 1060, 420));
 
         txtBuscar.setBorder(null);
         txtBuscar.addActionListener(new java.awt.event.ActionListener() {
@@ -2371,8 +2478,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel31.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel31.setForeground(new java.awt.Color(255, 255, 255));
         jLabel31.setText("A");
-        jPanel15.add(jLabel31, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 130, -1, -1));
+        jPanel15.add(jLabel31, new org.netbeans.lib.awtextra.AbsoluteConstraints(280, 130, -1, -1));
 
+        TablaVentaHistorial.setBorder(javax.swing.BorderFactory.createCompoundBorder());
         TablaVentaHistorial.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2391,7 +2499,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel33.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
         jLabel33.setForeground(new java.awt.Color(255, 255, 255));
         jLabel33.setText("HISTORIAL DE VENTAS");
-        jPanel15.add(jLabel33, new org.netbeans.lib.awtextra.AbsoluteConstraints(340, 30, -1, -1));
+        jPanel15.add(jLabel33, new org.netbeans.lib.awtextra.AbsoluteConstraints(340, 20, -1, -1));
 
         btnExportarVenta.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         btnExportarVenta.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/sobresalir.png"))); // NOI18N
@@ -2404,24 +2512,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         });
         jPanel15.add(btnExportarVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(950, 130, 110, 40));
 
-        txtFechaFin.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
-        txtFechaFin.setBorder(null);
-        jPanel15.add(txtFechaFin, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 130, 100, 30));
-
-        txtFechaInicial.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
-        txtFechaInicial.setBorder(null);
-        txtFechaInicial.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                txtFechaInicialActionPerformed(evt);
-            }
-        });
-        jPanel15.add(txtFechaInicial, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 100, 30));
-
-        jLabel42.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
-        jLabel42.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel42.setText("DD-MM-AA");
-        jPanel15.add(jLabel42, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 100, 100, -1));
-
         btnBuscarFechaVenta.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         btnBuscarFechaVenta.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/lupa.png"))); // NOI18N
         btnBuscarFechaVenta.setText("BUSCAR");
@@ -2431,17 +2521,12 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 btnBuscarFechaVentaActionPerformed(evt);
             }
         });
-        jPanel15.add(btnBuscarFechaVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 120, 100, 40));
+        jPanel15.add(btnBuscarFechaVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 120, 100, 40));
 
         jLabel43.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel43.setForeground(new java.awt.Color(255, 255, 255));
         jLabel43.setText("FECHA");
         jPanel15.add(jLabel43, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 130, -1, -1));
-
-        jLabel44.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
-        jLabel44.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel44.setText("DD-MM-AA");
-        jPanel15.add(jLabel44, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 100, 100, -1));
 
         btnActualizarHistorialVenta.setBackground(new java.awt.Color(50, 101, 255));
         btnActualizarHistorialVenta.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
@@ -2453,6 +2538,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
         jPanel15.add(btnActualizarHistorialVenta, new org.netbeans.lib.awtextra.AbsoluteConstraints(1010, 20, 50, 50));
+        jPanel15.add(dateChooserInicio, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 140, 30));
+        jPanel15.add(dateChooserFin, new org.netbeans.lib.awtextra.AbsoluteConstraints(310, 130, 130, 30));
 
         javax.swing.GroupLayout HistorialVentaLayout = new javax.swing.GroupLayout(HistorialVenta);
         HistorialVenta.setLayout(HistorialVentaLayout);
@@ -2495,33 +2582,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel45.setText("FECHA");
         jPanel2.add(jLabel45, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 130, -1, -1));
 
-        txtFechaInicial2.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
-        txtFechaInicial2.setBorder(null);
-        txtFechaInicial2.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                txtFechaInicial2ActionPerformed(evt);
-            }
-        });
-        jPanel2.add(txtFechaInicial2, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 100, 30));
-
-        jLabel46.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
-        jLabel46.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel46.setText("DD-MM-AA");
-        jPanel2.add(jLabel46, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 100, 100, -1));
-
         jLabel47.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel47.setForeground(new java.awt.Color(255, 255, 255));
         jLabel47.setText("A");
-        jPanel2.add(jLabel47, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 130, -1, -1));
-
-        txtFechaFin2.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
-        txtFechaFin2.setBorder(null);
-        jPanel2.add(txtFechaFin2, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 130, 100, 30));
-
-        jLabel48.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
-        jLabel48.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel48.setText("DD-MM-AA");
-        jPanel2.add(jLabel48, new org.netbeans.lib.awtextra.AbsoluteConstraints(290, 100, 100, -1));
+        jPanel2.add(jLabel47, new org.netbeans.lib.awtextra.AbsoluteConstraints(280, 130, -1, -1));
 
         btnBuscarFechaCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         btnBuscarFechaCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/lupa.png"))); // NOI18N
@@ -2532,7 +2596,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 btnBuscarFechaCompraActionPerformed(evt);
             }
         });
-        jPanel2.add(btnBuscarFechaCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(410, 120, 100, 40));
+        jPanel2.add(btnBuscarFechaCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(460, 120, 100, 40));
 
         btnExportarCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         btnExportarCompra.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/sobresalir.png"))); // NOI18N
@@ -2555,6 +2619,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         });
         jPanel2.add(btnActualizarHistorialCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(1010, 20, 50, 50));
+        jPanel2.add(dateChooserFin2, new org.netbeans.lib.awtextra.AbsoluteConstraints(310, 130, 130, 30));
+        jPanel2.add(dateChooserInicio2, new org.netbeans.lib.awtextra.AbsoluteConstraints(130, 130, 140, 30));
 
         javax.swing.GroupLayout HistorialCompraLayout = new javax.swing.GroupLayout(HistorialCompra);
         HistorialCompra.setLayout(HistorialCompraLayout);
@@ -2874,13 +2940,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         QuitarProductoVenta();
     }//GEN-LAST:event_jButton11ActionPerformed
 
-    private void txtFechaInicialActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtFechaInicialActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_txtFechaInicialActionPerformed
-
     private void btnActualizarHistorialVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarHistorialVentaActionPerformed
-        txtFechaInicial.setText("");
-        txtFechaFin.setText("");
         historialVenta();
     }//GEN-LAST:event_btnActualizarHistorialVentaActionPerformed
 
@@ -2939,10 +2999,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         historialCompra();
     }//GEN-LAST:event_jButton7ActionPerformed
 
-    private void txtFechaInicial2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtFechaInicial2ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_txtFechaInicial2ActionPerformed
-
     private void btnBuscarFechaCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnBuscarFechaCompraActionPerformed
         buscarCompraPorFecha();
     }//GEN-LAST:event_btnBuscarFechaCompraActionPerformed
@@ -2959,6 +3015,18 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private void jButton11KeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_jButton11KeyReleased
         // TODO add your handling code here:
     }//GEN-LAST:event_jButton11KeyReleased
+
+    private void dateDesdePropertyChange(java.beans.PropertyChangeEvent evt) {//GEN-FIRST:event_dateDesdePropertyChange
+        if ("date".equals(evt.getPropertyName())) {
+            ReporteCaja();
+        }
+    }//GEN-LAST:event_dateDesdePropertyChange
+
+    private void dateHastaPropertyChange(java.beans.PropertyChangeEvent evt) {//GEN-FIRST:event_dateHastaPropertyChange
+        if ("date".equals(evt.getPropertyName())) {
+            ReporteCaja();
+        }
+    }//GEN-LAST:event_dateHastaPropertyChange
 
     /**
      * @param args the command line arguments
@@ -3026,6 +3094,12 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JButton btnRegistrar;
     private javax.swing.JButton btnSalir;
     private javax.swing.JButton btnStock;
+    private com.toedter.calendar.JDateChooser dateChooserFin;
+    private com.toedter.calendar.JDateChooser dateChooserFin2;
+    private com.toedter.calendar.JDateChooser dateChooserInicio;
+    private com.toedter.calendar.JDateChooser dateChooserInicio2;
+    private com.toedter.calendar.JDateChooser dateDesde;
+    private com.toedter.calendar.JDateChooser dateHasta;
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButton10;
     private javax.swing.JButton jButton11;
@@ -3052,6 +3126,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel21;
     private javax.swing.JLabel jLabel22;
     private javax.swing.JLabel jLabel23;
+    private javax.swing.JLabel jLabel24;
     private javax.swing.JLabel jLabel25;
     private javax.swing.JLabel jLabel26;
     private javax.swing.JLabel jLabel27;
@@ -3071,13 +3146,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JLabel jLabel4;
     private javax.swing.JLabel jLabel40;
     private javax.swing.JLabel jLabel41;
-    private javax.swing.JLabel jLabel42;
     private javax.swing.JLabel jLabel43;
-    private javax.swing.JLabel jLabel44;
     private javax.swing.JLabel jLabel45;
-    private javax.swing.JLabel jLabel46;
     private javax.swing.JLabel jLabel47;
-    private javax.swing.JLabel jLabel48;
+    private javax.swing.JLabel jLabel49;
     private javax.swing.JLabel jLabel5;
     private javax.swing.JLabel jLabel6;
     private javax.swing.JLabel jLabel7;
@@ -3094,6 +3166,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JPanel jPanel17;
     private javax.swing.JPanel jPanel18;
     private javax.swing.JPanel jPanel2;
+    private javax.swing.JPanel jPanel3;
     private javax.swing.JPanel jPanel4;
     private javax.swing.JPanel jPanel5;
     private javax.swing.JScrollPane jScrollPane1;
@@ -3116,10 +3189,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private javax.swing.JTextField txtDireccion;
     private javax.swing.JTextField txtEfectivo;
     private javax.swing.JButton txtExportar;
-    private javax.swing.JTextField txtFechaFin;
-    private javax.swing.JTextField txtFechaFin2;
-    private javax.swing.JTextField txtFechaInicial;
-    private javax.swing.JTextField txtFechaInicial2;
     private javax.swing.JTextField txtIngresoTotal;
     private javax.swing.JTextField txtNFactura;
     private javax.swing.JTextField txtNombre;
