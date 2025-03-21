@@ -36,6 +36,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -120,6 +121,14 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         modelo.setColumnIdentifiers(new String[]{"Código", "Descripción", "Precio Uni", "Precio Cost", "Stock", "Proveedor"});
         TablaInventario.setModel(modelo);
+
+        TableColumnModel columnModel = TablaInventario.getColumnModel();
+        columnModel.getColumn(0).setPreferredWidth(100);  // Código
+        columnModel.getColumn(1).setPreferredWidth(300);  // Descripción
+        columnModel.getColumn(2).setPreferredWidth(120);  // Precio Uni
+        columnModel.getColumn(3).setPreferredWidth(120);  // Precio Cost
+        columnModel.getColumn(4).setPreferredWidth(80);   // Stock
+        columnModel.getColumn(5).setPreferredWidth(150);  // Proveedor
 
         sorter = new TableRowSorter<>(modelo);
         TablaInventario.setRowSorter(sorter);
@@ -220,9 +229,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 + "FROM Venta v "
                 + "WHERE DATE(v.Fecha_Venta) BETWEEN ? AND ?) AS Totales";
 
-        NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(new Locale("es", "CO")); // Moneda de Colombia
+        NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(Locale.of("es", "CO"));
 
-        try (PreparedStatement ps = conexion.prepareStatement(sql)) {
+        try {
+            ps = conexion.prepareStatement(sql);
+
             ps.setString(1, fechaDesde);
             ps.setString(2, fechaHasta);
             ps.setString(3, fechaDesde);
@@ -230,7 +241,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             ps.setString(5, fechaDesde);
             ps.setString(6, fechaHasta);
 
-            try (ResultSet res = ps.executeQuery()) {
+            try {
+                res = ps.executeQuery();
+
                 // Inicializar con $0
                 txtEfectivo.setText("$0");
                 txtTarjeta.setText("$0");
@@ -245,27 +258,27 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 }
 
                 while (res.next()) {
-                    String metodo = res.getString("Metodo_Pago").trim().toLowerCase();
+                    String metodo = res.getString("Metodo_Pago").trim();
                     double total = res.getDouble("Total");
                     String totalFormateado = formatoMoneda.format(total); // Formatear en moneda
 
                     switch (metodo) {
-                        case "efectivo":
+                        case "EFECTIVO":
                             txtEfectivo.setText(totalFormateado);
                             break;
-                        case "tarjeta":
+                        case "TARJETA":
                             txtTarjeta.setText(totalFormateado);
                             break;
-                        case "transferencia":
+                        case "TRANSFERENCIA":
                             txtTransferencia.setText(totalFormateado);
                             break;
-                        case "cuenta corriente":
+                        case "CUENTA CORRIENTE":
                             txtCuentaCorriente.setText(totalFormateado);
                             break;
-                        case "devoluciones":
+                        case "DEVOLUCIONES":
                             txtDevoluciones.setText(totalFormateado);
                             break;
-                        case "total":
+                        case "TOTAL":
                             txtTotalCaja.setText(totalFormateado);
                             break;
                         default:
@@ -273,6 +286,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                             break;
                     }
                 }
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(null, "Error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -501,42 +516,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         return total;
     }
 
-//    private double totalOriginal = 0.0; // Guarda el total sin descuento
-//
-//// ⚡ Se llama solo cuando se agregan/quitan productos, no en cada tecla.
-//    private void actualizarTotal() {
-//        totalOriginal = calcularTotal(); // Solo recalcula el total original cuando cambian los productos
-//        aplicarDescuento(); // Aplica el descuento correctamente
-//    }
-//
-//// ⚡ Se ejecuta en cada pulsación, pero no modifica totalOriginal
-//    private void aplicarDescuento() {
-//        double total = totalOriginal; // Siempre partimos del total original
-//
-//        String textoDescuento = txtDescuento.getText().trim();
-//
-//        if (!textoDescuento.isEmpty()) {
-//            try {
-//                double descuento = Double.parseDouble(textoDescuento);
-//
-//                // Validar que el descuento sea un porcentaje válido entre 0 y 100
-//                if (descuento < 0 || descuento > 100) {
-//                    JOptionPane.showMessageDialog(null, "Ingrese un porcentaje de descuento entre 0 y 100.");
-//                    txtDescuento.setText(""); // Limpiar el campo
-//                    return;
-//                }
-//
-//                total -= totalOriginal * (descuento / 100.0); // Aplicar descuento correctamente
-//            } catch (NumberFormatException e) {
-//                JOptionPane.showMessageDialog(null, "Ingrese un número válido para el descuento.");
-//                txtDescuento.setText(""); // Limpiar si hay error
-//                return;
-//            }
-//        }
-//
-//        // Mostrar el total actualizado en el campo
-//        txtTotalV.setText(String.format("%.2f", total));
-//    }
     private void asignarCliente() {
         try {
             String sql = "SELECT ID, Nombre FROM cliente";
@@ -877,6 +856,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 txtPrecioVentaCompra.setText(rs.getString("Precio"));
                 txtStockCompra.setText(rs.getString("Stock"));
                 txtCantidadCompra.setEnabled(true);
+                txtPrecioVentaCompra.setEnabled(true);
                 txtPrecioCostoCompra.setEnabled(true);
                 boxProveedorCompra.setEnabled(true); // Bloquea proveedor si ya existe
             } else {
@@ -1293,7 +1273,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     //calcular el total en el inventario
     private void CalcularTotalInventario() {
         double total = 0;
-        NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(new Locale("es", "CO")); // Formato de moneda colombiana
+        NumberFormat formatoMoneda = NumberFormat.getCurrencyInstance(Locale.of("es", "CO")); // Formato de moneda colombiana
 
         for (int i = 0; i < TablaInventario.getRowCount(); i++) {
             try {
@@ -1406,6 +1386,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jTabbedPane1 = new javax.swing.JTabbedPane();
         ReporteCaja = new javax.swing.JPanel();
         jPanel10 = new javax.swing.JPanel();
+        jLabel24 = new javax.swing.JLabel();
         jLabel5 = new javax.swing.JLabel();
         txtTotalCaja = new javax.swing.JTextField();
         jLabel6 = new javax.swing.JLabel();
@@ -1418,7 +1399,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtCuentaCorriente = new javax.swing.JTextField();
         jLabel10 = new javax.swing.JLabel();
         txtDevoluciones = new javax.swing.JTextField();
-        jLabel24 = new javax.swing.JLabel();
         jPanel3 = new javax.swing.JPanel();
         dateHasta = new com.toedter.calendar.JDateChooser();
         jLabel49 = new javax.swing.JLabel();
@@ -1646,7 +1626,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 .addComponent(jButton5, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(18, 18, 18)
                 .addComponent(jButton7, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(93, Short.MAX_VALUE))
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         jPanel1.add(jPanel4, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 200, 750));
@@ -1682,14 +1662,14 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(txtRol, javax.swing.GroupLayout.PREFERRED_SIZE, 250, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addComponent(jLabel34))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 171, Short.MAX_VALUE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addComponent(btnSalir)
                 .addContainerGap())
         );
         jPanel11Layout.setVerticalGroup(
             jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel11Layout.createSequentialGroup()
-                .addContainerGap(34, Short.MAX_VALUE)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                 .addGroup(jPanel11Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                     .addComponent(btnSalir, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addGroup(jPanel11Layout.createSequentialGroup()
@@ -1705,6 +1685,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jPanel10.setBackground(new java.awt.Color(50, 101, 255));
         jPanel10.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        jLabel24.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
+        jLabel24.setForeground(new java.awt.Color(255, 255, 255));
+        jLabel24.setText("REPORTE DE CAJA");
+        jPanel10.add(jLabel24, new org.netbeans.lib.awtextra.AbsoluteConstraints(350, 30, -1, -1));
 
         jLabel5.setFont(new java.awt.Font("Roboto Medium", 0, 24)); // NOI18N
         jLabel5.setForeground(new java.awt.Color(255, 51, 51));
@@ -1772,11 +1757,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtDevoluciones.setBorder(null);
         jPanel10.add(txtDevoluciones, new org.netbeans.lib.awtextra.AbsoluteConstraints(380, 370, 220, 30));
 
-        jLabel24.setFont(new java.awt.Font("Roboto Medium", 0, 36)); // NOI18N
-        jLabel24.setForeground(new java.awt.Color(255, 255, 255));
-        jLabel24.setText("REPORTE DE CAJA");
-        jPanel10.add(jLabel24, new org.netbeans.lib.awtextra.AbsoluteConstraints(360, 30, 320, -1));
-
         jPanel3.setBackground(new java.awt.Color(204, 204, 204));
         jPanel3.setBorder(javax.swing.BorderFactory.createTitledBorder("Fecha"));
 
@@ -1841,7 +1821,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         );
         ReporteCajaLayout.setVerticalGroup(
             ReporteCajaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel10, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, ReporteCajaLayout.createSequentialGroup()
+                .addContainerGap()
+                .addComponent(jPanel10, javax.swing.GroupLayout.DEFAULT_SIZE, 639, Short.MAX_VALUE))
         );
 
         jTabbedPane1.addTab("RC", ReporteCaja);
@@ -1859,6 +1841,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel3.setText("BUSCAR:");
         jPanel5.add(jLabel3, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 100, -1, 30));
 
+        TablaInventario.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         TablaInventario.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2090,6 +2073,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel12.setText("VENTA");
         jPanel12.add(jLabel12, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 20, -1, -1));
 
+        TablaVenta.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         TablaVenta.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2103,7 +2087,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         ));
         jScrollPane2.setViewportView(TablaVenta);
 
-        jPanel12.add(jScrollPane2, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 250, 1030, 300));
+        jPanel12.add(jScrollPane2, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 250, 1040, 300));
 
         txtTotalV.setEditable(false);
         txtTotalV.setBackground(new java.awt.Color(50, 101, 255));
@@ -2141,10 +2125,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         );
         VentaLayout.setVerticalGroup(
             VentaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, VentaLayout.createSequentialGroup()
-                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addGroup(VentaLayout.createSequentialGroup()
                 .addComponent(jPanel12, javax.swing.GroupLayout.PREFERRED_SIZE, 646, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(16, 16, 16))
+                .addGap(0, 0, Short.MAX_VALUE))
         );
 
         jTabbedPane1.addTab("Venta", Venta);
@@ -2162,6 +2145,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel18.setText("BUSCAR:");
         jPanel13.add(jLabel18, new org.netbeans.lib.awtextra.AbsoluteConstraints(430, 110, -1, -1));
 
+        TablaCliente.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         TablaCliente.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2279,6 +2263,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jPanel14.setBackground(new java.awt.Color(50, 101, 255));
         jPanel14.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
+        TablaCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         TablaCompra.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2481,6 +2466,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jPanel15.add(jLabel31, new org.netbeans.lib.awtextra.AbsoluteConstraints(280, 130, -1, -1));
 
         TablaVentaHistorial.setBorder(javax.swing.BorderFactory.createCompoundBorder());
+        TablaVentaHistorial.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         TablaVentaHistorial.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2562,6 +2548,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         jLabel35.setText("HISTORIAL INGRESO DE MERCANCIA");
         jPanel2.add(jLabel35, new org.netbeans.lib.awtextra.AbsoluteConstraints(230, 20, -1, -1));
 
+        TablaHistorialCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         TablaHistorialCompra.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
                 {null, null, null, null},
@@ -2630,7 +2617,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         );
         HistorialCompraLayout.setVerticalGroup(
             HistorialCompraLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 668, Short.MAX_VALUE)
+            .addComponent(jPanel2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 645, Short.MAX_VALUE)
         );
 
         jTabbedPane1.addTab("tab7", HistorialCompra);
@@ -2641,7 +2628,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 1300, Short.MAX_VALUE)
+            .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 1301, Short.MAX_VALUE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -2899,6 +2886,14 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                     ps.setInt(5, cantidad);
                     ps.setInt(6, idProveedor);
                     ps.executeUpdate();
+                } else {
+                    // Si el producto ya existe, actualizar Stock y Precio de Venta
+                    String updateProducto = "UPDATE Producto SET Stock = Stock + ?, Precio = ? WHERE Codigo = ?";
+                    ps = conexion.prepareStatement(updateProducto);
+                    ps.setInt(1, cantidad);
+                    ps.setDouble(2, precioVenta); // Se actualiza el precio de venta
+                    ps.setString(3, codigo);
+                    ps.executeUpdate();
                 }
 
                 // Insertar Detalle_Compra
@@ -2908,13 +2903,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 ps.setString(2, codigo);
                 ps.setInt(3, cantidad);
                 ps.setDouble(4, precioCosto);
-                ps.executeUpdate();
-
-                // Actualizar Stock
-                String updateStock = "UPDATE Producto SET Stock = Stock + ? WHERE Codigo = ?";
-                ps = conexion.prepareStatement(updateStock);
-                ps.setInt(1, cantidad);
-                ps.setString(2, codigo);
                 ps.executeUpdate();
             }
 
@@ -2934,6 +2922,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             } catch (SQLException e) {
             }
         }
+
     }//GEN-LAST:event_btnFinalizarCompraActionPerformed
 
     private void jButton11ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton11ActionPerformed

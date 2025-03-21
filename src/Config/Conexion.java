@@ -18,7 +18,7 @@ public class Conexion {
     Connection conec = null;
     private static final String url = "jdbc:mysql://127.0.0.1/tecnimotosjm";
     private static final String usuario = "root";
-    private static final String clave = "";
+    private static final String clave = "123456";
 
     public Connection conectar(){
         try {
