@@ -17,9 +17,6 @@ import java.sql.SQLException;
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -84,14 +81,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     private void configurarPermisos() {
-        String rol = SessionManager.getRolUsuarioActual(); // Obtener el rol del usuario
+        String rol = SessionManager.getRolUsuarioActual();
+        txtRol.setText(rol);
 
-        txtRol.setText(rol); // Mostrar el rol en la interfaz
+        // Lista de componentes a bloquear para vendedores
+        boolean esVendedor = "Vendedor".equals(rol);
 
-        if ("Vendedor".equals(rol)) {
-            btnEliminarCliente.setEnabled(false);
-        } else if ("Administrador".equals(rol)) {
-            btnEliminarCliente.setEnabled(true);
+        // Componentes principales a deshabilitar
+        btnEliminarCliente.setEnabled(!esVendedor);
+
+        // Tabla (bloquear edición directa)
+        if (esVendedor) {
+            TablaInventario.setDefaultEditor(Object.class, null);
+            TablaCliente.setDefaultEditor(Object.class, null);
         }
     }
 
@@ -664,21 +666,29 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     private void actualizarCliente(int fila, int columna) {
-        String CedulaAnterior = TablaCliente.getValueAt(fila, 0).toString(); // Obtener la cédula antes del cambio
+        String CedulaAnterior = TablaCliente.getValueAt(fila, 0).toString();
         String Columna = TablaCliente.getColumnName(columna);
         String NuevoValor = TablaCliente.getValueAt(fila, columna).toString();
 
         try {
+            // Mapeo de nombres de columnas de la tabla JTable a la base de datos
+            String columnaBD = Columna;
+            if (Columna.equals("Nombres")) {
+                columnaBD = "Nombre";
+            } else if (Columna.equals("Apellidos")) {
+                columnaBD = "Apellido";
+            } else if (Columna.equals("Nit/Cedula")) {
+                columnaBD = "Cedula";
+            }
 
             if (Columna.equalsIgnoreCase("Nit/Cedula")) {
-                // Si se cambia la cédula, actualizar toda la fila
                 String NuevaCedula = NuevoValor;
                 String Nombre = TablaCliente.getValueAt(fila, 1).toString();
                 String Apellido = TablaCliente.getValueAt(fila, 2).toString();
                 String Telefono = TablaCliente.getValueAt(fila, 3).toString();
                 String Direccion = TablaCliente.getValueAt(fila, 4).toString();
 
-                String sql = "UPDATE Cliente SET Cedula = ?, Nombres = ?, Apellidos = ?, Telefono = ?, Direccion = ? WHERE Cedula = ?";
+                String sql = "UPDATE Cliente SET Cedula = ?, Nombre = ?, Apellido = ?, Telefono = ?, Direccion = ? WHERE Cedula = ?";
                 ps = conexion.prepareStatement(sql);
                 ps.setString(1, NuevaCedula);
                 ps.setString(2, Nombre);
@@ -687,8 +697,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                 ps.setString(5, Direccion);
                 ps.setString(6, CedulaAnterior);
             } else {
-                // Si se cambia otro dato, solo actualizar esa columna
-                String sql = "UPDATE Cliente SET " + Columna + " = ? WHERE Cedula = ?";
+                String sql = "UPDATE Cliente SET " + columnaBD + " = ? WHERE Cedula = ?";
                 ps = conexion.prepareStatement(sql);
                 ps.setString(1, NuevoValor);
                 ps.setString(2, CedulaAnterior);
@@ -696,13 +705,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
             int res = ps.executeUpdate();
             if (res > 0) {
-                String nombreCliente = TablaCliente.getValueAt(fila, 1).toString(); // Obtener el nombre
+                String nombreCliente = TablaCliente.getValueAt(fila, 1).toString();
                 JOptionPane.showMessageDialog(null, "Información del cliente '" + nombreCliente + "' actualizada correctamente.", "Actualización", JOptionPane.INFORMATION_MESSAGE);
             }
-
-            conexion.close();
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(null, "Error al actualizar cliente: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        } finally {
+            try {
+                if (ps != null) {
+                    ps.close();
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
     }
 
@@ -869,6 +884,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                     habilitarCamposParaNuevoProducto(); // Activa campos para agregarlo manualmente
                 } else {
                     limpiarCampos(); // Limpia si el usuario no quiere agregarlo
+                    cargarProveedores();
                 }
             }
         } catch (SQLException e) {
@@ -896,20 +912,31 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }
 
     private int obtenerIdProveedor(String proveedor) throws SQLException {
+        int idProveedor = -1;
+
         String query = "SELECT ID FROM Proveedor WHERE Proveedor = ?";
-        ps = conexion.prepareStatement(query);
-        ps.setString(1, proveedor);
-        res = ps.executeQuery();
-        if (res.next()) {
-            return res.getInt("ID");
-        } else {
-            String insertProveedor = "INSERT INTO Proveedor (Proveedor) VALUES (?)";
-            ps = conexion.prepareStatement(insertProveedor, Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, proveedor);
-            ps.executeUpdate();
-            res = ps.getGeneratedKeys();
-            return res.next() ? res.getInt(1) : -1;
+        try (PreparedStatement psSelect = conexion.prepareStatement(query)) {
+            psSelect.setString(1, proveedor);
+            try (ResultSet resSelect = psSelect.executeQuery()) {
+                if (resSelect.next()) {
+                    return resSelect.getInt("ID");  // Devuelve el ID si ya existe
+                }
+            }
         }
+
+        // Si el proveedor no existe, lo insertamos
+        String insertProveedor = "INSERT INTO Proveedor (Proveedor) VALUES (?)";
+        try (PreparedStatement psInsert = conexion.prepareStatement(insertProveedor, Statement.RETURN_GENERATED_KEYS)) {
+            psInsert.setString(1, proveedor);
+            psInsert.executeUpdate();
+            try (ResultSet resInsert = psInsert.getGeneratedKeys()) {
+                if (resInsert.next()) {
+                    idProveedor = resInsert.getInt(1);  // Obtiene el ID generado
+                }
+            }
+        }
+
+        return idProveedor;  // Devuelve el ID del nuevo proveedor o -1 si hubo un error
     }
 
     private void configurarTablaCompra() {
@@ -953,7 +980,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         txtPrecioCostoCompra.setText("");
         txtPrecioVentaCompra.setText("");
         txtStockCompra.setText("");
-        boxProveedorCompra.setSelectedItem(null);
+        boxProveedorCompra.setEnabled(false);
     }
 
     private void habilitarCamposParaNuevoProducto() {
@@ -1075,22 +1102,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             }
         } catch (SQLException e) {
             JOptionPane.showMessageDialog(null, "Error al filtrar ventas: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Convierte una fecha ingresada por el usuario en formato "D-M-YYYY" o
-     * "DD-MM-YYYY" a "YYYY-MM-DD"
-     */
-    private String convertirFecha(String fechaUsuario) {
-        try {
-            DateTimeFormatter formatterEntrada = DateTimeFormatter.ofPattern("d-M-yyyy");
-            DateTimeFormatter formatterSalida = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            LocalDate fecha = LocalDate.parse(fechaUsuario, formatterEntrada);
-            return fecha.format(formatterSalida);
-        } catch (DateTimeParseException e) {
-            JOptionPane.showMessageDialog(null, "Formato de fecha inválido. Use DD-MM-YYYY.");
-            return null;
         }
     }
 
@@ -1511,6 +1522,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         dateChooserInicio2 = new com.toedter.calendar.JDateChooser();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        getContentPane().setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
 
         jPanel1.setBackground(new java.awt.Color(255, 255, 255));
         jPanel1.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
@@ -1662,7 +1674,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(txtRol, javax.swing.GroupLayout.PREFERRED_SIZE, 250, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addComponent(jLabel34))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 171, Short.MAX_VALUE)
                 .addComponent(btnSalir)
                 .addContainerGap())
         );
@@ -1817,7 +1829,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             ReporteCajaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(ReporteCajaLayout.createSequentialGroup()
                 .addComponent(jPanel10, javax.swing.GroupLayout.PREFERRED_SIZE, 1078, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(0, 0, Short.MAX_VALUE))
+                .addGap(0, 2, Short.MAX_VALUE))
         );
         ReporteCajaLayout.setVerticalGroup(
             ReporteCajaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -2084,7 +2096,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             new String [] {
                 "Title 1", "Title 2", "Title 3", "Title 4"
             }
-        ));
+        ) {
+            boolean[] canEdit = new boolean [] {
+                false, false, false, false
+            };
+
+            public boolean isCellEditable(int rowIndex, int columnIndex) {
+                return canEdit [columnIndex];
+            }
+        });
         jScrollPane2.setViewportView(TablaVenta);
 
         jPanel12.add(jScrollPane2, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 250, 1040, 300));
@@ -2251,7 +2271,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         Cliente.setLayout(ClienteLayout);
         ClienteLayout.setHorizontalGroup(
             ClienteLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel13, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jPanel13, javax.swing.GroupLayout.DEFAULT_SIZE, 1080, Short.MAX_VALUE)
         );
         ClienteLayout.setVerticalGroup(
             ClienteLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -2274,7 +2294,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             new String [] {
                 "Title 1", "Title 2", "Title 3", "Title 4"
             }
-        ));
+        ) {
+            boolean[] canEdit = new boolean [] {
+                false, false, false, false
+            };
+
+            public boolean isCellEditable(int rowIndex, int columnIndex) {
+                return canEdit [columnIndex];
+            }
+        });
         jScrollPane5.setViewportView(TablaCompra);
 
         jPanel14.add(jScrollPane5, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 100, 550, 460));
@@ -2284,7 +2312,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel25.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel25.setText("N FACTURA");
-        jPanel17.add(jLabel25, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 0, 100, 30));
+        jPanel17.add(jLabel25, new org.netbeans.lib.awtextra.AbsoluteConstraints(50, 0, -1, -1));
 
         txtNFactura.setEditable(false);
         txtNFactura.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
@@ -2328,7 +2356,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel27.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel27.setText("REF/CODIGO");
-        jPanel18.add(jLabel27, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 10, 120, 30));
+        jPanel18.add(jLabel27, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 10, -1, -1));
 
         txtCantidadCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtCantidadCompra.setBorder(null);
@@ -2341,7 +2369,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel28.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel28.setText("CANTIDAD");
-        jPanel18.add(jLabel28, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 10, 90, 30));
+        jPanel18.add(jLabel28, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 10, -1, -1));
 
         txtDescripcionCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtDescripcionCompra.setBorder(null);
@@ -2354,11 +2382,11 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel37.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel37.setText("DESCRIPCION");
-        jPanel18.add(jLabel37, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 90, 120, 30));
+        jPanel18.add(jLabel37, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 90, -1, -1));
 
         jLabel39.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel39.setText("PRECIO COSTO");
-        jPanel18.add(jLabel39, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 180, 130, 30));
+        jPanel18.add(jLabel39, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 180, -1, -1));
 
         txtPrecioCostoCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtPrecioCostoCompra.setBorder(null);
@@ -2381,7 +2409,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel38.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel38.setText("STOCK");
-        jPanel18.add(jLabel38, new org.netbeans.lib.awtextra.AbsoluteConstraints(330, 10, 60, 30));
+        jPanel18.add(jLabel38, new org.netbeans.lib.awtextra.AbsoluteConstraints(330, 10, -1, -1));
 
         txtPrecioVentaCompra.setFont(new java.awt.Font("Roboto Black", 0, 14)); // NOI18N
         txtPrecioVentaCompra.setBorder(null);
@@ -2399,14 +2427,19 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jLabel40.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel40.setText("PRECIO VENTA");
-        jPanel18.add(jLabel40, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 250, 130, 30));
+        jPanel18.add(jLabel40, new org.netbeans.lib.awtextra.AbsoluteConstraints(40, 250, -1, -1));
 
         jLabel41.setFont(new java.awt.Font("Roboto Medium", 0, 18)); // NOI18N
         jLabel41.setText("PROVEEDOR");
-        jPanel18.add(jLabel41, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 180, 130, 30));
+        jPanel18.add(jLabel41, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 180, -1, -1));
 
         boxProveedorCompra.setEditable(true);
         boxProveedorCompra.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Item 1", "Item 2", "Item 3", "Item 4" }));
+        boxProveedorCompra.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                boxProveedorCompraActionPerformed(evt);
+            }
+        });
         jPanel18.add(boxProveedorCompra, new org.netbeans.lib.awtextra.AbsoluteConstraints(250, 210, 140, 30));
 
         btnAgregarCompra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
@@ -2448,7 +2481,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         CompraInventario.setLayout(CompraInventarioLayout);
         CompraInventarioLayout.setHorizontalGroup(
             CompraInventarioLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel14, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jPanel14, javax.swing.GroupLayout.DEFAULT_SIZE, 1080, Short.MAX_VALUE)
         );
         CompraInventarioLayout.setVerticalGroup(
             CompraInventarioLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -2477,7 +2510,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             new String [] {
                 "Title 1", "Title 2", "Title 3", "Title 4"
             }
-        ));
+        ) {
+            boolean[] canEdit = new boolean [] {
+                false, false, false, false
+            };
+
+            public boolean isCellEditable(int rowIndex, int columnIndex) {
+                return canEdit [columnIndex];
+            }
+        });
         jScrollPane4.setViewportView(TablaVentaHistorial);
 
         jPanel15.add(jScrollPane4, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 1040, -1));
@@ -2531,7 +2572,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         HistorialVenta.setLayout(HistorialVentaLayout);
         HistorialVentaLayout.setHorizontalGroup(
             HistorialVentaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel15, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jPanel15, javax.swing.GroupLayout.DEFAULT_SIZE, 1080, Short.MAX_VALUE)
         );
         HistorialVentaLayout.setVerticalGroup(
             HistorialVentaLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -2559,7 +2600,15 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             new String [] {
                 "Title 1", "Title 2", "Title 3", "Title 4"
             }
-        ));
+        ) {
+            boolean[] canEdit = new boolean [] {
+                false, false, false, false
+            };
+
+            public boolean isCellEditable(int rowIndex, int columnIndex) {
+                return canEdit [columnIndex];
+            }
+        });
         jScrollPane6.setViewportView(TablaHistorialCompra);
 
         jPanel2.add(jScrollPane6, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 190, 1040, -1));
@@ -2613,7 +2662,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         HistorialCompra.setLayout(HistorialCompraLayout);
         HistorialCompraLayout.setHorizontalGroup(
             HistorialCompraLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, 1080, Short.MAX_VALUE)
         );
         HistorialCompraLayout.setVerticalGroup(
             HistorialCompraLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -2624,16 +2673,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
         jPanel1.add(jTabbedPane1, new org.netbeans.lib.awtextra.AbsoluteConstraints(210, 40, 1080, 680));
 
-        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
-        getContentPane().setLayout(layout);
-        layout.setHorizontalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, 1301, Short.MAX_VALUE)
-        );
-        layout.setVerticalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel1, javax.swing.GroupLayout.PREFERRED_SIZE, 749, javax.swing.GroupLayout.PREFERRED_SIZE)
-        );
+        getContentPane().add(jPanel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 1301, 749));
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
@@ -2645,6 +2685,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
         jTabbedPane1.setSelectedIndex(4);
         configurarTablaCompra();
+        cargarProveedores();
     }//GEN-LAST:event_jButton2ActionPerformed
 
     private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
@@ -2661,6 +2702,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
     private void jButton5ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton5ActionPerformed
         jTabbedPane1.setSelectedIndex(5);
+        dateChooserInicio.setDate(null);
+        dateChooserFin.setDate(null);
         historialVenta();
     }//GEN-LAST:event_jButton5ActionPerformed
 
@@ -2796,6 +2839,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
         model.addRow(new Object[]{codigo, descripcion, cantidad, precioCosto, precioVenta, stock, proveedor});
         limpiarCampos();
         bloquearCampos();
+        cargarProveedores();
     }//GEN-LAST:event_btnAgregarCompraActionPerformed
 
     private void btnQuitarCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnQuitarCompraActionPerformed
@@ -2910,6 +2954,7 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             JOptionPane.showMessageDialog(null, "Compra registrada exitosamente.");
             configurarTablaCompra();
             obtenerUltimaFactura();
+            cargarProveedores();
         } catch (SQLException e) {
             try {
                 conexion.rollback();
@@ -2922,7 +2967,6 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             } catch (SQLException e) {
             }
         }
-
     }//GEN-LAST:event_btnFinalizarCompraActionPerformed
 
     private void jButton11ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton11ActionPerformed
@@ -2930,6 +2974,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }//GEN-LAST:event_jButton11ActionPerformed
 
     private void btnActualizarHistorialVentaActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarHistorialVentaActionPerformed
+        dateChooserInicio.setDate(null);
+        dateChooserFin.setDate(null);
         historialVenta();
     }//GEN-LAST:event_btnActualizarHistorialVentaActionPerformed
 
@@ -2985,6 +3031,8 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
 
     private void jButton7ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton7ActionPerformed
         jTabbedPane1.setSelectedIndex(6);
+        dateChooserInicio2.setDate(null);
+        dateChooserFin2.setDate(null);
         historialCompra();
     }//GEN-LAST:event_jButton7ActionPerformed
 
@@ -2998,7 +3046,9 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
     }//GEN-LAST:event_btnExportarCompraActionPerformed
 
     private void btnActualizarHistorialCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnActualizarHistorialCompraActionPerformed
-        // TODO add your handling code here:
+        dateChooserInicio2.setDate(null);
+        dateChooserFin2.setDate(null);
+        historialCompra();
     }//GEN-LAST:event_btnActualizarHistorialCompraActionPerformed
 
     private void jButton11KeyReleased(java.awt.event.KeyEvent evt) {//GEN-FIRST:event_jButton11KeyReleased
@@ -3016,6 +3066,10 @@ public class Interfaz_Almacen extends javax.swing.JFrame {
             ReporteCaja();
         }
     }//GEN-LAST:event_dateHastaPropertyChange
+
+    private void boxProveedorCompraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_boxProveedorCompraActionPerformed
+        // TODO add your handling code here:
+    }//GEN-LAST:event_boxProveedorCompraActionPerformed
 
     /**
      * @param args the command line arguments

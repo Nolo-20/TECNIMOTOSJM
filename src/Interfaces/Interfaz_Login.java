@@ -14,6 +14,8 @@ import javax.swing.ImageIcon;
 import javax.swing.JOptionPane;
 import org.mindrot.jbcrypt.BCrypt;
 import java.sql.SQLException;
+import java.util.Arrays;
+import javax.swing.JPasswordField;
 
 /**
  *
@@ -76,6 +78,31 @@ public class Interfaz_Login extends javax.swing.JFrame {
         return false;
     }
 
+    private boolean validarAdmin(String contrasenaIngresada) {
+        String sql = "SELECT contrasena FROM usuario WHERE usuario = 'admin'";
+
+        try {
+            ps = conexion.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                String contrasenaAlmacenada = rs.getString("contrasena");
+
+                // Verificar si es texto plano (para compatibilidad con admin legacy)
+                if (!contrasenaAlmacenada.startsWith("$2a$")) {
+                    return contrasenaAlmacenada.equals(contrasenaIngresada);
+                }
+
+                // Verificar con BCrypt
+                return BCrypt.checkpw(contrasenaIngresada, contrasenaAlmacenada);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
+
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -97,6 +124,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
         jSeparator2 = new javax.swing.JSeparator();
         txtContrasena = new javax.swing.JPasswordField();
         jLabel9 = new javax.swing.JLabel();
+        mostrarContra = new javax.swing.JCheckBox();
         jPanel3 = new javax.swing.JPanel();
         jLabel1 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
@@ -128,7 +156,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
                 btnRegistrarUActionPerformed(evt);
             }
         });
-        jPanel2.add(btnRegistrarU, new org.netbeans.lib.awtextra.AbsoluteConstraints(90, 450, 120, 40));
+        jPanel2.add(btnRegistrarU, new org.netbeans.lib.awtextra.AbsoluteConstraints(140, 450, 120, 40));
 
         jLabel8.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
         jLabel8.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Imagenes/acceso.png"))); // NOI18N
@@ -143,7 +171,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
                 btnIngresarActionPerformed(evt);
             }
         });
-        jPanel2.add(btnIngresar, new org.netbeans.lib.awtextra.AbsoluteConstraints(90, 400, 120, 40));
+        jPanel2.add(btnIngresar, new org.netbeans.lib.awtextra.AbsoluteConstraints(140, 400, 120, 40));
 
         txtUsuario.setFont(new java.awt.Font("Roboto", 1, 14)); // NOI18N
         txtUsuario.setBorder(null);
@@ -188,6 +216,16 @@ public class Interfaz_Login extends javax.swing.JFrame {
         jLabel9.setText("USUARIO");
         jPanel2.add(jLabel9, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 260, -1, -1));
 
+        mostrarContra.setBackground(new java.awt.Color(255, 255, 255));
+        mostrarContra.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
+        mostrarContra.setText("Mostrar");
+        mostrarContra.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                mostrarContraActionPerformed(evt);
+            }
+        });
+        jPanel2.add(mostrarContra, new org.netbeans.lib.awtextra.AbsoluteConstraints(20, 390, -1, -1));
+
         jPanel1.add(jPanel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(500, 0, 300, 510));
 
         jPanel3.setBackground(new java.awt.Color(204, 204, 204));
@@ -197,7 +235,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
         jPanel3.add(jLabel1, new org.netbeans.lib.awtextra.AbsoluteConstraints(0, 0, 430, 330));
 
         jLabel2.setFont(new java.awt.Font("Roboto Black", 0, 12)); // NOI18N
-        jLabel2.setText("V1.2");
+        jLabel2.setText("V1.2.1");
         jPanel3.add(jLabel2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 480, -1, -1));
 
         jLabel4.setFont(new java.awt.Font("Roboto Black", 0, 18)); // NOI18N
@@ -244,10 +282,41 @@ public class Interfaz_Login extends javax.swing.JFrame {
     }//GEN-LAST:event_txtContrasenaActionPerformed
 
     private void btnRegistrarUActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRegistrarUActionPerformed
-        Interfaz_Registro registro = new Interfaz_Registro();
-        registro.setVisible(true);
-        registro.setLocationRelativeTo(null);
-        this.dispose();
+        // Crear el campo de contraseña
+        JPasswordField passwordField = new JPasswordField();
+
+        // Mostrar el diálogo
+        int opcion = JOptionPane.showConfirmDialog(
+                this,
+                passwordField,
+                "Ingrese la contraseña de administrador",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE
+        );
+
+        if (opcion == JOptionPane.OK_OPTION) {
+            char[] password = passwordField.getPassword();
+            String contrasenaAdmin = new String(password);
+
+            // Limpiar el array de caracteres por seguridad
+            Arrays.fill(password, ' ');
+
+            if (!contrasenaAdmin.isEmpty()) {
+                if (validarAdmin(contrasenaAdmin)) {
+                    Interfaz_Registro registro = new Interfaz_Registro();
+                    registro.setVisible(true);
+                    registro.setLocationRelativeTo(null);
+                    this.dispose();
+                } else {
+                    JOptionPane.showMessageDialog(
+                            this,
+                            "Contraseña incorrecta. Solo administradores pueden registrar usuarios.",
+                            "Error de autenticación",
+                            JOptionPane.ERROR_MESSAGE
+                    );
+                }
+            }
+        }
     }//GEN-LAST:event_btnRegistrarUActionPerformed
 
     private void btnIngresarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnIngresarActionPerformed
@@ -293,6 +362,14 @@ public class Interfaz_Login extends javax.swing.JFrame {
             btnIngresar.doClick(); // Simula un clic en el botón de inicio de sesión
         }
     }//GEN-LAST:event_txtContrasenaKeyPressed
+
+    private void mostrarContraActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_mostrarContraActionPerformed
+        if (mostrarContra.isSelected()) {
+            txtContrasena.setEchoChar((char) 0); // Mostrar texto plano
+        } else {
+            txtContrasena.setEchoChar('•'); // Mostrar caracteres de contraseña
+        }
+    }//GEN-LAST:event_mostrarContraActionPerformed
 
     /**
      * @param args the command line arguments
@@ -346,6 +423,7 @@ public class Interfaz_Login extends javax.swing.JFrame {
     private javax.swing.JPanel jPanel3;
     private javax.swing.JSeparator jSeparator1;
     private javax.swing.JSeparator jSeparator2;
+    private javax.swing.JCheckBox mostrarContra;
     private javax.swing.JPasswordField txtContrasena;
     private javax.swing.JTextField txtUsuario;
     // End of variables declaration//GEN-END:variables

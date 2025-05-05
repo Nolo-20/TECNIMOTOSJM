@@ -19,7 +19,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.sql.PreparedStatement;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 
 /**
@@ -32,13 +31,6 @@ import java.io.*;
 import java.nio.file.Paths;
 import java.sql.*;
 import java.text.DecimalFormat;
-import javax.print.Doc;
-import javax.print.DocFlavor;
-import javax.print.DocPrintJob;
-import javax.print.PrintService;
-import javax.print.PrintServiceLookup;
-import javax.print.SimpleDoc;
-import javax.print.attribute.HashPrintRequestAttributeSet;
 import org.apache.commons.io.IOUtils;
 
 public class Ticket {
@@ -70,7 +62,6 @@ public class Ticket {
 
             documento.close();
             abrirPDF(rutaPDF);
-            imprimirPDF(rutaPDF);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -120,7 +111,8 @@ public class Ticket {
             ps = conexion.prepareStatement(sql);
             
             ps.setInt(1, idVenta);
-            try (ResultSet rs = ps.executeQuery()) {
+            try {
+                rs = ps.executeQuery();
                 if (rs.next()) {
                     PdfPTable tablaDatos = new PdfPTable(2);
                     tablaDatos.setWidthPercentage(100);
@@ -156,6 +148,8 @@ public class Ticket {
 
                     documento.add(tablaDatos);
                 }
+            }catch(SQLException e){
+                System.out.println(e.getMessage());
             }
         }catch(SQLException e){
             System.out.println(e.getMessage());
@@ -274,24 +268,23 @@ public class Ticket {
         }
     }
 
-    private void imprimirPDF(String rutaPDF) {
-        try {
-            FileInputStream fis = new FileInputStream(rutaPDF);
-            Doc pdfDoc = new SimpleDoc(fis, DocFlavor.INPUT_STREAM.AUTOSENSE, null);
-
-            // Buscar la impresora predeterminada
-            PrintService service = PrintServiceLookup.lookupDefaultPrintService();
-
-            if (service != null) {
-                DocPrintJob job = service.createPrintJob();
-                job.print(pdfDoc, new HashPrintRequestAttributeSet());
-            } else {
-                System.out.println("No se encontró una impresora predeterminada.");
-            }
-            fis.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
+//    private void imprimirPDF(String rutaPDF) {
+//        try {
+//            FileInputStream fis = new FileInputStream(rutaPDF);
+//            Doc pdfDoc = new SimpleDoc(fis, DocFlavor.INPUT_STREAM.AUTOSENSE, null);
+//
+//            // Buscar la impresora predeterminada
+//            PrintService service = PrintServiceLookup.lookupDefaultPrintService();
+//
+//            if (service != null) {
+//                DocPrintJob job = service.createPrintJob();
+//                job.print(pdfDoc, new HashPrintRequestAttributeSet());
+//            } else {
+//                System.out.println("No se encontró una impresora predeterminada.");
+//            }
+//            fis.close();
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//    }
 }

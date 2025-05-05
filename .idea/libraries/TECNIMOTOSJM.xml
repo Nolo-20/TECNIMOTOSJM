@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="TECNIMOTOSJM">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/store/TECNIMOTOSJM.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
